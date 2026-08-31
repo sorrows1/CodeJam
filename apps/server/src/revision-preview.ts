@@ -171,6 +171,17 @@ export function scopePreviewAssetSecurityHeaders(headers: PreviewSecurityHeaders
   return { ...headers, 'content-security-policy': policy };
 }
 
+/** Allows one exact Launchpad origin to frame a cross-origin preview server. */
+export function scopePreviewFrameAncestor(headers: PreviewSecurityHeaders, parentOrigin: string): PreviewSecurityHeaders {
+  let parsed: URL;
+  try { parsed = new URL(parentOrigin); } catch { throw new Error('Invalid preview parent origin'); }
+  if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash) throw new Error('Invalid preview parent origin');
+  const source = parsed.origin;
+  const policy = headers['content-security-policy'].replace(/frame-ancestors\s+[^;]+/, `frame-ancestors ${source}`);
+  if (policy === headers['content-security-policy']) throw new Error('Preview frame policy is missing');
+  return { ...headers, 'content-security-policy': policy };
+}
+
 export function isAllowedPreviewRoute(requestPath: string, allowedRoutes: readonly string[]): boolean {
   let decoded: string;
   try { decoded = decodeURIComponent(requestPath); } catch { return false; }

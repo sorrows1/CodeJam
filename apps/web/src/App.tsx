@@ -16,7 +16,7 @@ const emptyForm = {
     "Help me build and test software in this workspace. Keep changes small and explain the result.",
 };
 
-type AgentPreviewSession = { id: string; agentId: string; workspaceHash: string; profile: string; contentPath: string; expiresAt: string };
+type AgentPreviewSession = { id: string; agentId: string; workspaceHash: string; profile: string; contentPath: string; isolatedOrigin: boolean; expiresAt: string };
 
 function formatTime(value: string): string {
   return new Intl.DateTimeFormat(undefined, {
@@ -709,7 +709,7 @@ export default function App() {
               <div><span className="eyebrow">Current Agent workspace</span><h2>Application before the new request</h2><p>Read-only temporary preview · workspace {agentPreview.workspaceHash.slice(0, 10)}</p></div>
               <button className="button button-primary" onClick={() => void closeAgentPreview()}>Close preview</button>
             </header>
-            <iframe title="Current Agent application" sandbox="allow-scripts" src={agentPreview.contentPath} />
+            <iframe title="Current Agent application" sandbox={agentPreview.isolatedOrigin ? "allow-scripts allow-same-origin" : "allow-scripts"} src={agentPreview.contentPath} />
           </section>
         </div>
       )}

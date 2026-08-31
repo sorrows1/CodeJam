@@ -295,7 +295,18 @@ export class RevisionPreviewService {
       await mkdir(temporary, { recursive: false });
       const source = this.workspaces.workspacePath(agentId);
       const previewData = await loadPreviewDataContract(source, this.sensitiveValues);
-      const allowedRoutes = [...new Set(previewData?.routes ?? [])];
+      let allowedRoutes = [...new Set(previewData?.routes ?? [])];
+      const publication = (database.agentWorkspacePublications ?? [])
+        .filter((item) => item.agentId === agentId && item.status === 'published' && item.expectedPublishedWorkspaceHash === workspaceHash)
+        .sort((left, right) => String(right.completedAt).localeCompare(String(left.completedAt)))[0];
+      if (publication) {
+        const designRevision = database.designRevisions.find((item) => item.id === publication.designRevisionId && item.missionId === publication.missionId);
+        if (!designRevision) throw new Error('Published Agent design is unavailable');
+        const materialization = resolveDesignReferenceMaterialization({ revision: designRevision, artifacts: database.missionArtifacts });
+        if (!materialization.ok || !await this.references.verify(materialization.materialization)) throw new Error('Published Agent design integrity failed');
+        const packageValue = parseDesignPackage(await this.references.read(materialization.materialization.package, 768 * 1024));
+        allowedRoutes = [...new Set([...allowedRoutes, ...packageValue.surfaces.map((surface) => surface.route)])];
+      }
       const realized = path.join(temporary, 'source');
       await mkdir(realized);
       await this.realizeWebSource(source, realized);

@@ -110,8 +110,13 @@ describe("HTTP boundary", () => {
     expect(cookie).toContain('SameSite=None');
     expect(cookie).toContain('Secure');
     expect(cookie).toContain('Partitioned');
-    expect(cookie).toContain(`/previews/${sessionId}/content/`);
+    expect(cookie).toContain('Path=/');
     expect(cookie).not.toContain('SameSite=Strict');
+    expect(created.json().session.isolatedOrigin).toBe(true);
+    expect(created.json().session.contentPath).toMatch(/^http:\/\/localhost:\d+\/$/);
+    const routed = await fetch(new URL('/agents', created.json().session.contentPath), { headers: { cookie: `conductor_preview_${sessionId}=${token}` } });
+    expect(routed.status).toBe(200);
+    expect(await routed.text()).toContain('<main/>');
 
     const denied = await app.inject({ method: 'GET', url: `/api/missions/${missionId}/previews/${sessionId}/content/` });
     expect(denied.statusCode).not.toBe(200);
@@ -135,7 +140,9 @@ describe("HTTP boundary", () => {
     const missions = { createAgentPreview: () => Promise.resolve({ session: { id: sessionId, target: { kind: 'agent', workspaceHash }, profile: 'static-html', contentPath, expiresAt: new Date(Date.now() + 300_000).toISOString(), previewDataHash: null }, token }), getAgentPreviewAsset: (_agent: string, _session: string, supplied: string) => supplied === token ? Promise.resolve({ bytes: Buffer.from('<main>current app</main>'), mediaType: 'text/html; charset=utf-8', headers: PREVIEW_SECURITY_HEADERS }) : Promise.reject(new Error('denied')) } as any;
     const app = await createApp(loadConfig({ NODE_ENV: 'test', APP_AUTH_TOKEN: 'a-strong-test-token' }), service, missions);
     const created = await app.inject({ method: 'POST', url: `/api/agents/${agentId}/previews`, headers: { authorization: 'Bearer a-strong-test-token' }, payload: {} });
-    expect(created.statusCode).toBe(201); expect(created.json().session.workspaceHash).toBe(workspaceHash); expect(created.headers['set-cookie']).toContain(contentPath);
+    expect(created.statusCode).toBe(201); expect(created.json().session.workspaceHash).toBe(workspaceHash); expect(created.json().session.isolatedOrigin).toBe(true); expect(created.headers['set-cookie']).toContain('Path=/');
+    const routed = await fetch(new URL('/agents', created.json().session.contentPath), { headers: { cookie: `conductor_preview_${sessionId}=${token}` } });
+    expect(routed.status).toBe(200); expect(await routed.text()).toContain('current app');
     const content = await app.inject({ method: 'GET', url: contentPath, headers: { cookie: `conductor_preview_${sessionId}=${token}`, host: 'localhost:5173' } });
     expect(content.statusCode).toBe(200); expect(content.body).toContain('current app'); expect(content.headers['content-security-policy']).toContain("connect-src 'none'");
     await app.close();

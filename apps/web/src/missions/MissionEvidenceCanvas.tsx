@@ -7,7 +7,7 @@ import { ScaledDesignPreview } from './ScaledDesignPreview';
 import './MissionEvidenceCanvas.css';
 
 type ViewMode = 'compare' | 'approved' | 'built';
-type PreviewState = { id: string; missionId: string; target: { kind: 'design'; revisionId: string } | { kind: 'workspace'; revisionId: string; designRevisionId: string }; contentPath: string; expiresAt: string; previewDataHash: string | null; bindingKey: string };
+type PreviewState = { id: string; missionId: string; target: { kind: 'design'; revisionId: string } | { kind: 'workspace'; revisionId: string; designRevisionId: string }; contentPath: string; isolatedOrigin: boolean; expiresAt: string; previewDataHash: string | null; bindingKey: string };
 type VerificationEntry = Extract<MissionHistoryEntry, { kind: 'verification' }>;
 
 const shortId = (value: string | null) => !value ? '—' : value.length > 14 ? `${value.slice(0, 8)}…${value.slice(-4)}` : value;
@@ -22,7 +22,7 @@ function verificationGroups(entries: readonly VerificationEntry[]): Array<{ mode
   return groups;
 }
 
-function ScaledLivePreview({ src, viewport }: { src: string; viewport: LogicalDesignViewport }) {
+function ScaledLivePreview({ src, isolatedOrigin, viewport }: { src: string; isolatedOrigin: boolean; viewport: LogicalDesignViewport }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [availableWidth, setAvailableWidth] = useState(0);
 
@@ -48,7 +48,7 @@ function ScaledLivePreview({ src, viewport }: { src: string; viewport: LogicalDe
     style={{ height: renderedHeight }}
   >
     <div className="mission-live-preview__canvas" style={{ width: viewport.width, height: viewport.height, transform: `scale(${scale})` }}>
-      <iframe title="Built app preview" sandbox="allow-scripts" src={src} width={viewport.width} height={viewport.height} />
+      <iframe title="Built app preview" sandbox={isolatedOrigin ? "allow-scripts allow-same-origin" : "allow-scripts"} src={src} width={viewport.width} height={viewport.height} />
     </div>
   </div>;
 }
@@ -140,7 +140,7 @@ export function MissionEvidenceCanvas({ detail, reference }: { detail: MissionDe
   const canvas = <section className="mission-evidence-canvas" aria-label="Built app verification" ref={canvasRef}>
     <header className="mission-evidence-header"><div><span>Independent app check</span><h2>{selected ? `${selected.mode === 'final' ? 'Final check' : 'App check'} · ${selected.status.toUpperCase()}` : 'Approved design'}</h2><p>{currentDescription}</p></div><div className="mission-evidence-header__actions">{verifications.length > 1 ? <details className="mission-evidence-history"><summary>History · {verifications.length} checks</summary><div className="mission-evidence-history__menu">{groups.map((group) => <section key={group.mode}><header><strong>{group.mode === 'final' ? 'Final checks' : 'App checks'}</strong><small>{group.entries.length} {group.entries.length === 1 ? 'check' : 'checks'}</small></header>{group.entries.map((entry, index) => <button className={selected?.runId === entry.runId ? 'is-active' : ''} key={entry.runId} onClick={() => setSelectedId(entry.runId)}><span>{group.entries.length > 1 ? `Check ${index + 1}` : entry.mode === 'final' ? 'Final check' : 'App check'}</span><small>{entry.status}{entry.current ? ' · current' : ''}</small></button>)}</section>)}</div></details> : null}<button onClick={() => setFull(true)}>Open large</button></div></header>
     <div className="mission-evidence-switcher" role="group" aria-label="Verification view"><button className={mode === 'compare' ? 'is-active' : ''} onClick={() => setMode('compare')}>Compare</button><button className={mode === 'approved' ? 'is-active' : ''} onClick={() => setMode('approved')}>Approved design</button><button className={mode === 'built' ? 'is-active' : ''} onClick={() => setMode('built')}>Built result</button></div>
-    {activePreview ? <div className="mission-live-preview"><header><div><span>Interactive saved result</span><strong>Built app preview</strong></div><button onClick={() => void stopPreview()}>Stop preview</button></header><ScaledLivePreview src={activePreview.contentPath} viewport={viewport} /><small>Temporary preview · {viewport.width}×{viewport.height} review size · workspace {shortId(activePreview.target.revisionId)} · expires {new Date(activePreview.expiresAt).toLocaleTimeString()}</small></div> : <div className="mission-preview-row"><p>Want to try the built app instead of only viewing the verification capture?</p><button disabled={!previewTarget} onClick={() => void startPreview()}>Preview built app</button></div>}
+    {activePreview ? <div className="mission-live-preview"><header><div><span>Interactive saved result</span><strong>Built app preview</strong></div><button onClick={() => void stopPreview()}>Stop preview</button></header><ScaledLivePreview src={activePreview.contentPath} isolatedOrigin={activePreview.isolatedOrigin} viewport={viewport} /><small>Temporary preview · {viewport.width}×{viewport.height} review size · workspace {shortId(activePreview.target.revisionId)} · expires {new Date(activePreview.expiresAt).toLocaleTimeString()}</small></div> : <div className="mission-preview-row"><p>Want to try the built app instead of only viewing the verification capture?</p><button disabled={!previewTarget} onClick={() => void startPreview()}>Preview built app</button></div>}
     {previewError ? <div className="mission-preview-error" role="alert"><strong>Preview unavailable</strong><span>{previewError}</span><button onClick={() => void startPreview()}>Try again</button></div> : null}
     {comparison}
     <details className="mission-evidence-details"><summary>Technical details</summary><div className="mission-evidence-detail-grid"><section><span>Check status</span><strong>{selected?.current ? 'CURRENT' : 'HISTORICAL'}</strong><small>Recorded result: {selected?.status ?? 'Unavailable'}</small></section><section><span>Exact versions</span><strong>Design {shortId(binding.designRevisionId)}</strong><small>Workspace {shortId(binding.workspaceRevisionId)}</small></section><section><span>Checks</span><strong>{selected ? `${selected.checks.filter((check) => check.passed).length}/${selected.checks.length} passed` : 'Unavailable'}</strong><small>Correlation {shortId(selected?.correlationId ?? null)}</small></section></div>{selectedReference ? <pre>{selectedReference.contractJson}</pre> : null}{selected?.checks.map((check) => <p className={check.passed ? 'is-pass' : 'is-fail'} key={check.id}><strong>{check.passed ? 'PASS' : 'FAIL'} · {check.label}</strong><span>{check.details}</span></p>)}</details>

@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { buildPreviewContainerArgs, buildPreviewSecurityHeaders, detectPreviewProfile, isPreviewSourcePathAllowed, PREVIEW_SECURITY_HEADERS, resolvePreviewAsset, scopePreviewAssetSecurityHeaders } from './revision-preview.js';
+import { buildPreviewContainerArgs, buildPreviewSecurityHeaders, detectPreviewProfile, isPreviewSourcePathAllowed, PREVIEW_SECURITY_HEADERS, resolvePreviewAsset, scopePreviewAssetSecurityHeaders, scopePreviewFrameAncestor } from './revision-preview.js';
 
 describe('immutable revision preview boundaries', () => {
   it.each([['react', { vite: '1', react: '1', 'react-dom': '1' }, 'vite-react'], ['vue', { vite: '1', vue: '1' }, 'vite-vue'], ['vanilla', { vite: '1' }, 'vite-vanilla']] as const)('accepts the fixed %s Vite profile', async (_name, dependencies, expected) => {
@@ -59,5 +59,12 @@ describe('immutable revision preview boundaries', () => {
     expect(headers['content-security-policy']).toContain(`connect-src 'none' ${contentUrl}`);
     expect(() => scopePreviewAssetSecurityHeaders(PREVIEW_SECURITY_HEADERS, 'javascript:alert(1)')).toThrow('Invalid preview content URL');
     expect(() => scopePreviewAssetSecurityHeaders(PREVIEW_SECURITY_HEADERS, 'https://user:secret@example.com/content/')).toThrow('Invalid preview content URL');
+  });
+  it('allows only the exact Launchpad origin to frame an isolated preview origin', () => {
+    const headers = scopePreviewFrameAncestor(PREVIEW_SECURITY_HEADERS, 'http://localhost:3000');
+    expect(headers['content-security-policy']).toContain('frame-ancestors http://localhost:3000');
+    expect(headers['content-security-policy']).not.toContain("frame-ancestors 'self'");
+    expect(() => scopePreviewFrameAncestor(PREVIEW_SECURITY_HEADERS, 'https://user:secret@example.com')).toThrow('Invalid preview parent origin');
+    expect(() => scopePreviewFrameAncestor(PREVIEW_SECURITY_HEADERS, 'javascript:alert(1)')).toThrow('Invalid preview parent origin');
   });
 });

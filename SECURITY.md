@@ -21,6 +21,8 @@ credentials, personal data, or exploit details in an issue.
 - Model API key stored in Terraform POC state
 - Redaction is bounded pattern-based protection, not a guarantee against every
   possible secret-like string. Use dedicated demo credentials and data roots.
+- Full client-side routing inside interactive previews is supported only by the
+  loopback POC. Non-loopback deployments retain the opaque preview fallback.
 
 ## Safe use
 
@@ -44,6 +46,12 @@ through the real Playground, approval, verification, and publication path;
 the seeder preserves that authority history but never fabricates it.
 Mission artifacts, errors, events, and traces are bounded observable evidence;
 they do not contain raw prompts or private model reasoning.
+
+Interactive built/current-app previews use a short-lived, per-session loopback
+origin. This lets the saved application use normal root routes without sharing
+the Launchpad origin. Assets remain immutable and bounded; access uses a unique
+HttpOnly cookie, CSP permits only the exact Launchpad frame ancestor, and the
+preview server is closed on stop, expiry, replacement, or shutdown.
 
 ## Secret audit
 

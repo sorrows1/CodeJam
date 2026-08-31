@@ -9,6 +9,7 @@ import { HttpError } from "./errors.js";
 import type { AgentService } from "./agent-service.js";
 import type { MissionService } from "./mission-service.js";
 import { credentializePreviewHtml, scopePreviewAssetSecurityHeaders } from "./revision-preview.js";
+import { startPreviewOrigin, supportsIsolatedPreviewOrigin, type PreviewOriginHandle } from "./preview-origin-server.js";
 
 const agentIdParams = z.object({ id: z.string().uuid() });
 const runIdParams = z.object({ id: z.string().uuid() });
@@ -40,6 +41,25 @@ const previewContentPath = /^\/api\/(?:missions|agents)\/[0-9a-f]{8}-[0-9a-f]{4}
 
 export async function createApp(config: AppConfig, service: AgentService, missions?: MissionService): Promise<FastifyInstance> {
   const app = Fastify({ logger: { level: config.logLevel, redact: ["req.headers.authorization", "req.headers.cookie"] }, bodyLimit: 1_048_576 });
+  const previewOrigins = new Map<string, { ownerKey: string; handle: PreviewOriginHandle; timer: ReturnType<typeof setTimeout> }>();
+
+  const closePreviewOrigin = async (sessionId: string): Promise<void> => {
+    const active = previewOrigins.get(sessionId);
+    if (!active) return;
+    previewOrigins.delete(sessionId);
+    clearTimeout(active.timer);
+    await active.handle.close();
+  };
+  const installPreviewOrigin = async (input: { ownerKey: string; sessionId: string; protocol: string; hostname: string; host: string; getAsset: (token: string, requestPath: string) => Promise<{ bytes: Buffer; mediaType: string; headers: ReturnType<typeof scopePreviewAssetSecurityHeaders>; status?: number }> }): Promise<string | null> => {
+    if (!supportsIsolatedPreviewOrigin(input.protocol, input.hostname)) return null;
+    await Promise.all([...previewOrigins.entries()].filter(([, value]) => value.ownerKey === input.ownerKey).map(([sessionId]) => closePreviewOrigin(sessionId)));
+    const parentOrigin = new URL('/', `${input.protocol}://${input.host}`).origin;
+    const handle = await startPreviewOrigin({ sessionId: input.sessionId, parentOrigin, publicHostname: input.hostname, getAsset: input.getAsset });
+    const timer = setTimeout(() => { void closePreviewOrigin(input.sessionId); }, 300_000);
+    timer.unref?.();
+    previewOrigins.set(input.sessionId, { ownerKey: input.ownerKey, handle, timer });
+    return handle.contentUrl;
+  };
 
   await app.register(cors, { origin: config.nodeEnv === "development" ? ["http://localhost:5173", "http://127.0.0.1:5173"] : false });
 
@@ -66,9 +86,15 @@ export async function createApp(config: AppConfig, service: AgentService, missio
     const secure = config.nodeEnv === "production" && !new Set(["127.0.0.1", "::1", "localhost"]).has(config.host);
     if (secure && !request.protocol.startsWith("https")) throw new HttpError(503, "Preview requires TLS");
     const created = await missions.createAgentPreview(id);
-    return reply.header("set-cookie", `conductor_preview_${created.session.id}=${created.token}; HttpOnly; SameSite=None; Secure; Partitioned; Path=${created.session.contentPath}; Max-Age=300`).code(201).send({ session: { id: created.session.id, agentId: id, workspaceHash: created.session.target.kind === 'agent' ? created.session.target.workspaceHash : '', profile: created.session.profile, contentPath: created.session.contentPath, expiresAt: created.session.expiresAt, previewDataHash: created.session.previewDataHash } });
+    const host = request.headers.host;
+    if (!host) throw new HttpError(400, 'Preview request host is required');
+    let isolatedContentUrl: string | null;
+    try { isolatedContentUrl = await installPreviewOrigin({ ownerKey: `agent:${id}`, sessionId: created.session.id, protocol: request.protocol, hostname: request.hostname, host, getAsset: (token, requestPath) => missions.getAgentPreviewAsset(id, created.session.id, token, requestPath) }); }
+    catch (error) { await missions.stopAgentPreview(id, created.session.id).catch(() => undefined); throw error; }
+    const contentPath = isolatedContentUrl ?? created.session.contentPath;
+    return reply.header("set-cookie", `conductor_preview_${created.session.id}=${created.token}; HttpOnly; SameSite=None; Secure; Partitioned; Path=${isolatedContentUrl ? '/' : created.session.contentPath}; Max-Age=300`).code(201).send({ session: { id: created.session.id, agentId: id, workspaceHash: created.session.target.kind === 'agent' ? created.session.target.workspaceHash : '', profile: created.session.profile, contentPath, isolatedOrigin: Boolean(isolatedContentUrl), expiresAt: created.session.expiresAt, previewDataHash: created.session.previewDataHash } });
   });
-  app.delete("/api/agents/:id/previews/:sessionId", async (request, reply) => { if (!missions) throw new HttpError(503, "Mission service unavailable"); const params = previewParams.parse(request.params); await missions.stopAgentPreview(params.id, params.sessionId); return reply.code(204).send(); });
+  app.delete("/api/agents/:id/previews/:sessionId", async (request, reply) => { if (!missions) throw new HttpError(503, "Mission service unavailable"); const params = previewParams.parse(request.params); await closePreviewOrigin(params.sessionId); await missions.stopAgentPreview(params.id, params.sessionId); return reply.code(204).send(); });
   app.get("/api/agents/:id/previews/:sessionId/content/*", async (request, reply) => {
     if (!missions) throw new HttpError(503, "Mission service unavailable");
     const params = previewParams.extend({ '*': z.string() }).parse(request.params);
@@ -98,10 +124,18 @@ export async function createApp(config: AppConfig, service: AgentService, missio
   app.post("/api/missions/:id/previews", async (request, reply) => {
     if (!missions) throw new HttpError(503, "Mission service unavailable");
     const id = z.string().uuid().parse((request.params as { id: string }).id); const target = previewBody.parse(request.body); const secure = config.nodeEnv === "production" && !new Set(["127.0.0.1", "::1", "localhost"]).has(config.host); if (secure && !request.protocol.startsWith("https")) throw new HttpError(503, "Preview requires TLS"); const created = await missions.createPreview(id, target);
-    return reply.header("set-cookie", `conductor_preview_${created.session.id}=${created.token}; HttpOnly; SameSite=None; Secure; Partitioned; Path=${created.session.contentPath}; Max-Age=300`).code(201).send({ session: created.session });
+    const host = request.headers.host;
+    if (!host) throw new HttpError(400, 'Preview request host is required');
+    let isolatedContentUrl: string | null = null;
+    if (target.kind === 'workspace') {
+      try { isolatedContentUrl = await installPreviewOrigin({ ownerKey: `mission:${id}`, sessionId: created.session.id, protocol: request.protocol, hostname: request.hostname, host, getAsset: (token, requestPath) => missions.getPreviewAsset(id, created.session.id, token, requestPath) }); }
+      catch (error) { await missions.stopPreview(id, created.session.id).catch(() => undefined); throw error; }
+    }
+    const session = { ...created.session, contentPath: isolatedContentUrl ?? created.session.contentPath, isolatedOrigin: Boolean(isolatedContentUrl) };
+    return reply.header("set-cookie", `conductor_preview_${created.session.id}=${created.token}; HttpOnly; SameSite=None; Secure; Partitioned; Path=${isolatedContentUrl ? '/' : created.session.contentPath}; Max-Age=300`).code(201).send({ session });
   });
   app.get("/api/missions/:id/previews/:sessionId", async (request) => { if (!missions) throw new HttpError(503, "Mission service unavailable"); const params = previewParams.parse(request.params); return { session: await missions.getPreview(params.id, params.sessionId) }; });
-  app.delete("/api/missions/:id/previews/:sessionId", async (request, reply) => { if (!missions) throw new HttpError(503, "Mission service unavailable"); const params = previewParams.parse(request.params); await missions.stopPreview(params.id, params.sessionId); return reply.code(204).send(); });
+  app.delete("/api/missions/:id/previews/:sessionId", async (request, reply) => { if (!missions) throw new HttpError(503, "Mission service unavailable"); const params = previewParams.parse(request.params); await closePreviewOrigin(params.sessionId); await missions.stopPreview(params.id, params.sessionId); return reply.code(204).send(); });
   app.get("/api/missions/:id/previews/:sessionId/content/*", async (request, reply) => {
     if (!missions) throw new HttpError(503, "Mission service unavailable");
     const params = previewParams.extend({ '*': z.string() }).parse(request.params);
@@ -115,7 +149,7 @@ export async function createApp(config: AppConfig, service: AgentService, missio
     const securityHeaders = asset.mediaType.startsWith('text/html') ? scopePreviewAssetSecurityHeaders(asset.headers, contentUrl) : asset.headers;
     return reply.code(asset.status ?? 200).headers({ ...securityHeaders, 'content-type': asset.mediaType, 'access-control-allow-origin': 'null', 'access-control-allow-credentials': 'true' }).send(body);
   });
-  app.addHook('onClose', async () => { await missions?.shutdown?.(); });
+  app.addHook('onClose', async () => { await Promise.all([...previewOrigins.keys()].map(closePreviewOrigin)); await missions?.shutdown?.(); });
   app.post("/api/missions", async (request, reply) => {
     if (!missions) throw new HttpError(503, "Mission service unavailable");
     const body = missionBody.parse(request.body);
