@@ -128,4 +128,16 @@ describe("HTTP boundary", () => {
     expect(content.body).toContain('<img src="./logo.svg" crossorigin="use-credentials">');
     await app.close();
   });
+
+  it("serves a ready Agent workspace preview through the same opaque sandbox boundary", async () => {
+    const agentId = "00000000-0000-4000-8000-000000000009"; const sessionId = "00000000-0000-4000-8000-000000000010"; const token = "agent-preview-token"; const workspaceHash = "a".repeat(64);
+    const contentPath = `/api/agents/${agentId}/previews/${sessionId}/content/`;
+    const missions = { createAgentPreview: () => Promise.resolve({ session: { id: sessionId, target: { kind: 'agent', workspaceHash }, profile: 'static-html', contentPath, expiresAt: new Date(Date.now() + 300_000).toISOString(), previewDataHash: null }, token }), getAgentPreviewAsset: (_agent: string, _session: string, supplied: string) => supplied === token ? Promise.resolve({ bytes: Buffer.from('<main>current app</main>'), mediaType: 'text/html; charset=utf-8', headers: PREVIEW_SECURITY_HEADERS }) : Promise.reject(new Error('denied')) } as any;
+    const app = await createApp(loadConfig({ NODE_ENV: 'test', APP_AUTH_TOKEN: 'a-strong-test-token' }), service, missions);
+    const created = await app.inject({ method: 'POST', url: `/api/agents/${agentId}/previews`, headers: { authorization: 'Bearer a-strong-test-token' }, payload: {} });
+    expect(created.statusCode).toBe(201); expect(created.json().session.workspaceHash).toBe(workspaceHash); expect(created.headers['set-cookie']).toContain(contentPath);
+    const content = await app.inject({ method: 'GET', url: contentPath, headers: { cookie: `conductor_preview_${sessionId}=${token}`, host: 'localhost:5173' } });
+    expect(content.statusCode).toBe(200); expect(content.body).toContain('current app'); expect(content.headers['content-security-policy']).toContain("connect-src 'none'");
+    await app.close();
+  });
 });

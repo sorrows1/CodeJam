@@ -1,7 +1,7 @@
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { chromium } from "playwright";
 import {
   apiRequest,
@@ -21,6 +21,7 @@ import {
   runProcess,
   samePath,
 } from "./local-poc-utils.mjs";
+import { BASELINE_PROMPT } from "./demo-scenario.mjs";
 
 const environment = await loadLocalEnv();
 const stateRoot = localStateRoot(environment);
@@ -110,16 +111,30 @@ if (serverHealthy) {
         apiRequest(environment, `/api/agents/${agent.id}/impact-admissions`),
         apiRequest(environment, "/api/missions"),
       ]);
-      const runCount = runsResult.runs?.length ?? 0;
-      const messageCount = messagesResult.messages?.length ?? 0;
-      const admissionCount = admissionsResult.admissions?.length ?? 0;
-      const missionCount = missionsResult.missions?.length ?? 0;
-      const stateFresh = runCount === 0 && messageCount === 0 && admissionCount === 0 && missionCount === 0;
-      report("Prepared history", stateFresh, stateFresh ? "no Runs, Messages, admissions, or Missions" : `${runCount} Run(s), ${messageCount} Message(s), ${admissionCount} admission(s), ${missionCount} Mission(s)`);
-      let mainSource = "";
-      try { mainSource = await readFile(path.join(workspace, "src", "main.jsx"), "utf8"); } catch { /* reported below */ }
-      const baselineReady = mainSource.includes("Intent complete") && mainSource.includes("Reveal result") && !/Agent Activity|Filter by status/.test(mainSource);
-      report("Prepared baseline app", baselineReady, baselineReady ? "original intent-verification app; Activity is not pre-seeded" : "baseline markers are missing or the live Activity feature is already present");
+      const runs = runsResult.runs ?? [];
+      const messages = messagesResult.messages ?? [];
+      const admissions = admissionsResult.admissions ?? [];
+      const relatedMissions = (missionsResult.missions ?? []).filter((mission) => mission.participants?.some((participant) => participant.agentId === agent.id));
+      const baselineAdmission = admissions.find((item) => item.prompt === BASELINE_PROMPT && item.status === "promoted" && item.missionId);
+      const baselineMission = baselineAdmission ? relatedMissions.find((item) => item.id === baselineAdmission.missionId) : null;
+      const baselineDetail = baselineMission ? await apiRequest(environment, `/api/missions/${baselineMission.id}`) : null;
+      const realBaselineReady = runs.length === 0
+        && messages.some((item) => item.role === "user" && item.content === BASELINE_PROMPT)
+        && admissions.length === 1
+        && relatedMissions.length === 1
+        && baselineMission?.status === "completed"
+        && baselineDetail?.publication?.status === "published"
+        && baselineDetail?.attempts?.some((item) => item.stage === "design" && item.status === "completed")
+        && baselineDetail?.attempts?.some((item) => item.stage === "implement" && item.status === "completed")
+        && baselineDetail?.events?.some((item) => item.type === "verification_passed" && item.details?.mode === "final");
+      report("Prepared history", Boolean(realBaselineReady), realBaselineReady ? `one real Playground prompt -> completed Mission ${baselineMission.id} -> FINAL PASS -> published workspace` : "complete the documented one-time baseline Playground Mission before recording");
+      let sourceText = "";
+      try {
+        const sourceRoot = path.join(workspace, "src");
+        for (const entry of await readdir(sourceRoot, { withFileTypes: true })) if (entry.isFile() && /\.(?:js|jsx|ts|tsx|css|html)$/.test(entry.name)) sourceText += await readFile(path.join(sourceRoot, entry.name), "utf8");
+      } catch { /* reported below */ }
+      const baselineReady = ["Dashboard", "Agents", "Settings", "Reveal result"].every((marker) => sourceText.includes(marker)) && !/Agent Activity|Filter by status/.test(sourceText);
+      report("Prepared baseline app", baselineReady, baselineReady ? "published Agent Operations dashboard is present; Activity is not pre-seeded" : "published baseline markers are missing or the live Activity feature is already present");
     }
   } catch (error) {
     report("Prepared demo state", false, error instanceof Error ? error.message : String(error));

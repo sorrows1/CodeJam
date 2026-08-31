@@ -154,8 +154,8 @@ describe('immutable preview asset fidelity', () => {
 
     const preparation = await readFile(path.join(serverRoot, 'preview-prepare.mjs'), 'utf8');
     expect(preparation).toContain('inlinePreparedViteEntry');
-    expect(preparation).toContain("html.replace(tag, `<style>${css}</style>`)");
-    expect(preparation).toContain('html.replace(tag, `${openingTag}${javascript}</script>`)');
+    expect(preparation).toContain("html.replace(tag, () => `<style>${css}</style>`)");
+    expect(preparation).toContain('html.replace(tag, () => `${openingTag}${javascript}</script>`)');
 
     const dockerfile = await readFile(path.join(serverRoot, 'Dockerfile.verifier'), 'utf8');
     expect(dockerfile).toContain('@vitejs/plugin-vue@6.0.8');

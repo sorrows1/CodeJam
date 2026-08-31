@@ -52,6 +52,10 @@ npm run demo:seed
 The command creates a fresh `Demo Builder` Agent, then copies the checked-in
 `demo/intent-verification` fixture into that Agent's workspace. It prints the
 new UUID for auditability, but you do not need to copy it into another command.
+For the recording baseline, complete the real pre-recording Playground Mission
+documented in `docs/DEMO.md`, then run `npm run demo:seed` again. The seeder
+recognizes that exact completed Mission and preserves its published workspace
+and visible history.
 To select and reuse a particular Agent explicitly, the optional form is:
 
 ```text
@@ -59,8 +63,9 @@ npm run demo:seed -- --agent <agent-uuid>
 ```
 
 The seeder requires the platform-managed workspace and rejects symlinks. It
-overwrites only the fixture's named files and preserves unrelated workspace
-files.
+copies only the fixture's named files while the Agent has no history. Once the
+exact baseline Mission is complete, it refuses to overwrite the workspace or
+accept unrelated execution history.
 
 ## Development changes
 

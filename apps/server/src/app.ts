@@ -36,7 +36,7 @@ const implementationReviewBody = z.discriminatedUnion("decision", [
 ]);
 const previewBody = z.discriminatedUnion("kind", [z.object({ kind: z.literal("design"), revisionId: z.string().uuid() }).strict(), z.object({ kind: z.literal("workspace"), revisionId: z.string().uuid(), designRevisionId: z.string().uuid() }).strict()]);
 const previewParams = z.object({ id: z.string().uuid(), sessionId: z.string().uuid() });
-const previewContentPath = /^\/api\/missions\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/previews\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/content\/(?:.*)?$/i;
+const previewContentPath = /^\/api\/(?:missions|agents)\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/previews\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/content\/(?:.*)?$/i;
 
 export async function createApp(config: AppConfig, service: AgentService, missions?: MissionService): Promise<FastifyInstance> {
   const app = Fastify({ logger: { level: config.logLevel, redact: ["req.headers.authorization", "req.headers.cookie"] }, bodyLimit: 1_048_576 });
@@ -59,6 +59,29 @@ export async function createApp(config: AppConfig, service: AgentService, missio
   app.get("/api/auth", async () => ({ required: config.authToken.length > 0 }));
   app.get("/api/system", async () => service.systemInfo());
   app.get("/api/agents", async () => ({ agents: service.listAgents() }));
+
+  app.post("/api/agents/:id/previews", async (request, reply) => {
+    if (!missions) throw new HttpError(503, "Mission service unavailable");
+    const { id } = agentIdParams.parse(request.params);
+    const secure = config.nodeEnv === "production" && !new Set(["127.0.0.1", "::1", "localhost"]).has(config.host);
+    if (secure && !request.protocol.startsWith("https")) throw new HttpError(503, "Preview requires TLS");
+    const created = await missions.createAgentPreview(id);
+    return reply.header("set-cookie", `conductor_preview_${created.session.id}=${created.token}; HttpOnly; SameSite=None; Secure; Partitioned; Path=${created.session.contentPath}; Max-Age=300`).code(201).send({ session: { id: created.session.id, agentId: id, workspaceHash: created.session.target.kind === 'agent' ? created.session.target.workspaceHash : '', profile: created.session.profile, contentPath: created.session.contentPath, expiresAt: created.session.expiresAt, previewDataHash: created.session.previewDataHash } });
+  });
+  app.delete("/api/agents/:id/previews/:sessionId", async (request, reply) => { if (!missions) throw new HttpError(503, "Mission service unavailable"); const params = previewParams.parse(request.params); await missions.stopAgentPreview(params.id, params.sessionId); return reply.code(204).send(); });
+  app.get("/api/agents/:id/previews/:sessionId/content/*", async (request, reply) => {
+    if (!missions) throw new HttpError(503, "Mission service unavailable");
+    const params = previewParams.extend({ '*': z.string() }).parse(request.params);
+    const cookies = Object.fromEntries(String(request.headers.cookie ?? '').split(';').map((part) => part.trim().split('=').map(decodeURIComponent)).filter((pair) => pair.length === 2));
+    const token = cookies[`conductor_preview_${params.sessionId}`] ?? '';
+    const asset = await missions.getAgentPreviewAsset(params.id, params.sessionId, token, params['*']);
+    const body = asset.mediaType.startsWith('text/html') ? Buffer.from(credentializePreviewHtml(asset.bytes.toString('utf8')), 'utf8') : asset.bytes;
+    const host = request.headers.host;
+    if (!host) throw new HttpError(400, 'Preview request host is required');
+    const contentUrl = new URL(`/api/agents/${params.id}/previews/${params.sessionId}/content/`, `${request.protocol}://${host}`).toString();
+    const securityHeaders = asset.mediaType.startsWith('text/html') ? scopePreviewAssetSecurityHeaders(asset.headers, contentUrl) : asset.headers;
+    return reply.code(asset.status ?? 200).headers({ ...securityHeaders, 'content-type': asset.mediaType, 'access-control-allow-origin': 'null', 'access-control-allow-credentials': 'true' }).send(body);
+  });
 
   app.get("/api/missions", async () => ({ missions: missions?.listMissions() ?? [], summaries: missions?.listMissionSummaries() ?? [], agentAvailability: missions?.listAgentAvailability() ?? [] }));
   app.get("/api/missions/:id", async (request) => {

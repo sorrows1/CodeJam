@@ -5,55 +5,63 @@ Conductor keeps the Starter Kit's Agent frontend, Playground, Fastify control pl
 ## One-page architecture
 
 ```mermaid
-flowchart LR
-  User["User"] --> UI["Starter Agent UI + Playground"]
-  UI --> API["Fastify\nvalidated commands"]
+%%{init: {"themeVariables": {"fontSize": "19px"}, "flowchart": {"nodeSpacing": 42, "rankSpacing": 52, "curve": "linear"}}}%%
+flowchart TB
+  User["1 · User submits one Playground request"] --> UI["Agent UI + Playground"]
+  UI --> API["Fastify · validated commands"]
 
-  subgraph Trusted["CONDUCTOR TRUST BOUNDARY"]
-    API --> Impact["Impact admission\nread-only plan + candidate evidence"]
-    Impact --> Diff["Complete actual diff\nfinal admission evidence"]
+  subgraph Trusted["CONDUCTOR · TRUSTED SERVER-SIDE BOUNDARY"]
+    API --> Impact["2 · Read-only impact plan<br/>and isolated candidate evidence"]
+    Impact --> Decision{"What can the work affect?"}
 
-    Diff -->|"proven nonvisual"| PublishOrdinary["Transactional Agent publication"]
-    Diff -->|"frontend / ambiguous"| Mission["Governed Mission"]
+    Decision -->|"proven nonvisual"| Ordinary["Ordinary transactional publication"]
+    Decision -->|"frontend or ambiguous"| Mission["3 · Governed Mission"]
 
-    Mission --> Design["Designer proposes\nrendered design + acceptance requirements"]
-    Design --> Protected["Protected design reference\nhash-bound exact revision"]
-    Protected --> Approval["Explicit user approval\nexact design + requirements"]
+    Mission --> Design["4 · Designer proposes rendered design<br/>and testable requirements"]
+    Design --> Review["5 · User reviews every affected surface<br/>and approves the exact revision"]
+    Review --> Protected["Protected hash-bound reference<br/>+ server-side build gate"]
 
-    Approval --> BuildGate["Server-side build gate"]
-    BuildGate --> Builder["Builder Agent Run"]
-    Builder --> Capture["Captured implementation\nimmutable workspace revision"]
+    Protected --> Builder["6 · Builder Agent runs<br/>inside the isolated Runtime"]
+    Builder --> Captured["Captured immutable workspace"]
+    Captured --> Denial["DENIAL · Builder success<br/>is not Mission completion"]
 
-    Capture --> Precheck["Independent BrowserVerifier\nreal captured app"]
-    Protected --> Precheck
-    Precheck --> Checks["Semantic + interaction + runtime\n+ bounded visual-fidelity checks"]
+    Denial --> Precheck["7 · Independent BrowserVerifier<br/>runs the actual captured app"]
+    Protected -. "exact approved reference" .-> Precheck
+    Precheck --> Result{"App-check result"}
+    Result -->|"FAIL"| Repair["Bounded repair<br/>maximum two cycles"]
+    Repair --> Precheck
+    Result -->|"ERROR"| Retry["Retry verifier only<br/>same captured workspace"]
+    Retry --> Precheck
+    Result -->|"PASS"| BuiltReview["8 · User reviews and accepts<br/>the exact built result"]
 
-    Checks -->|"PASS"| BuiltReview["User reviews built result"]
-    Checks -->|"FAIL"| Denied["Completion denied / bounded repair policy"]
-    Checks -->|"ERROR"| Retry["Retry verifier only\nsame captured implementation"]
+    BuiltReview --> Final["9 · Separate FINAL BrowserVerifier"]
+    Protected -. "same approved reference" .-> Final
+    Captured -. "same accepted workspace" .-> Final
+    Final -->|"PASS"| Verified["10 · Publish exact verified workspace"]
+    Final -->|"FAIL"| Blocked["Completion remains blocked"]
 
-    BuiltReview --> Final["Separate final BrowserVerifier"]
-    Protected --> Final
-    Capture --> Final
-    Final -->|"current PASS"| PublishVerified["Transactional verified publication"]
-    Final -->|"FAIL"| Denied
-
-    PublishVerified --> Store["JsonStore + bounded evidence"]
-    PublishOrdinary --> Store
-    Impact --> Store
-    Mission --> Store
-    Precheck --> Store
-    Final --> Store
+    Impact -.-> Evidence["Bounded JsonStore evidence"]
+    Precheck -.-> Evidence
+    Final -.-> Evidence
   end
 
-  PublishOrdinary --> AgentWorkspace["Source Agent workspace"]
-  PublishVerified --> AgentWorkspace
+  Ordinary --> AgentWorkspace["Source Agent workspace"]
+  Verified --> AgentWorkspace
   AgentWorkspace --> UI
 
-  Builder --> Runtime["Isolated Agent Runtime"]
-  Precheck --> App["Actual Vite application"]
-  Final --> App
+  classDef primary fill:#4f46e5,color:#fff,stroke:#312e81,stroke-width:2px;
+  classDef guard fill:#fff4cc,color:#4a3600,stroke:#d49b00,stroke-width:2px;
+  classDef alternate fill:#eef0f3,color:#30343b,stroke:#8b929c;
+  classDef failure fill:#fde2e2,color:#7f1d1d,stroke:#c94a4a,stroke-width:2px;
+  class Mission,Design,Review,Protected,Builder,Captured,Precheck,BuiltReview,Final,Verified primary;
+  class Decision,Result,Denial guard;
+  class Ordinary,Evidence alternate;
+  class Repair,Retry,Blocked failure;
 ```
+
+The numbered purple path is the recorded demo. The gray branch is ordinary
+nonvisual Playground work. Yellow diamonds and the Builder denial are the
+authority gates; red nodes are bounded failure/recovery paths.
 
 ## What Conductor decides
 

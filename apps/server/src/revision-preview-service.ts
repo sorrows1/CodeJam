@@ -6,6 +6,7 @@ import type { JsonStore } from './store.js';
 import type { DesignReferenceStore } from './design-reference-store.js';
 import { resolveDesignReferenceMaterialization } from './design-reference-store.js';
 import type { MissionWorkspacePort } from './workspace.js';
+import { findReservingMission } from './mission-state.js';
 import { parseDesignPackage } from './design-package.js';
 import { loadPreviewDataContract, type PreviewDataContract } from './preview-data-contract.js';
 import {
@@ -33,7 +34,7 @@ const MAX_ENGINE_STDERR_BYTES = 4_096;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const containerId = /^[0-9a-f]{12,64}$/i;
 
-export type PreviewTarget = { kind: 'design'; revisionId: string } | { kind: 'workspace'; revisionId: string; designRevisionId?: string };
+export type PreviewTarget = { kind: 'design'; revisionId: string } | { kind: 'workspace'; revisionId: string; designRevisionId?: string } | { kind: 'agent'; workspaceHash: string };
 export interface PreviewRuntime {
   initialize?(): Promise<void>;
   prepare(input: { sourceRoot: string; outputRoot: string; profile: Exclude<PreviewProfile, 'static-html'> }): Promise<void>;
@@ -182,11 +183,11 @@ export class RevisionPreviewService {
   }
 
   async create(missionId: string, target: PreviewTarget): Promise<{ session: PreviewSessionView; token: string }> {
-    if (!uuid.test(missionId) || !uuid.test(target.revisionId) || (target.kind === 'workspace' && target.designRevisionId !== undefined && !uuid.test(target.designRevisionId))) throw new Error('Invalid preview target');
+    if (target.kind === 'agent' || !uuid.test(missionId) || !uuid.test(target.revisionId) || (target.kind === 'workspace' && target.designRevisionId !== undefined && !uuid.test(target.designRevisionId))) throw new Error('Invalid preview target');
     await this.expire();
     if ([...this.reservations.values()].some((item) => item.missionId === missionId)) throw new Error('Preview session is already starting');
     const existing = [...this.sessions.values()].find((item) => item.missionId === missionId) ?? null;
-    if (existing && existing.target.kind === target.kind && existing.target.revisionId === target.revisionId && (target.kind !== 'workspace' || existing.target.kind !== 'workspace' || existing.target.designRevisionId === target.designRevisionId)) {
+    if (existing && existing.target.kind !== 'agent' && existing.target.kind === target.kind && existing.target.revisionId === target.revisionId && (target.kind !== 'workspace' || existing.target.kind !== 'workspace' || existing.target.designRevisionId === target.designRevisionId)) {
       const token = randomBytes(32).toString('base64url');
       existing.tokenHash = createHash('sha256').update(token).digest();
       existing.expiresAt = new Date(this.now() + TTL_MS).toISOString();
@@ -253,6 +254,63 @@ export class RevisionPreviewService {
       await rm(temporary, { recursive: true, force: true });
       const token = randomBytes(32).toString('base64url');
       const session: Session = { id, missionId, target: { ...target }, profile, contentPath: `/api/missions/${missionId}/previews/${id}/content/`, expiresAt: new Date(this.now() + TTL_MS).toISOString(), previewDataHash: previewData?.hash ?? null, root: output, tokenHash: createHash('sha256').update(token).digest(), allowedRoutes, previewData };
+      this.sessions.set(id, session);
+      return { session: this.view(session), token };
+    } catch (error) {
+      await rm(temporary, { recursive: true, force: true });
+      await rm(output, { recursive: true, force: true });
+      throw error;
+    } finally {
+      this.reservations.delete(id);
+    }
+  }
+
+  async createAgent(agentId: string): Promise<{ session: PreviewSessionView; token: string }> {
+    if (!uuid.test(agentId)) throw new Error('Invalid preview target');
+    await this.expire();
+    if ([...this.reservations.values()].some((item) => item.missionId === agentId)) throw new Error('Preview session is already starting');
+    const database = this.store.snapshot();
+    const agent = database.agents.find((item) => item.id === agentId);
+    if (!agent) throw new Error('Agent not found');
+    if (agent.status !== 'ready' || findReservingMission(database.missions, agentId)) throw new Error('Agent workspace is not ready to preview');
+    if (database.playgroundImpactAdmissions.some((item) => item.agentId === agentId && ['planning', 'confirmation_required', 'staging', 'publishing', 'promoting'].includes(item.status))) throw new Error('Agent workspace is not ready to preview');
+    const workspaceHash = await this.workspaces.fingerprintAgentWorkspace(agentId);
+    const existing = [...this.sessions.values()].find((item) => item.missionId === agentId) ?? null;
+    if (existing?.target.kind === 'agent' && existing.target.workspaceHash === workspaceHash) {
+      const token = randomBytes(32).toString('base64url');
+      existing.tokenHash = createHash('sha256').update(token).digest();
+      existing.expiresAt = new Date(this.now() + TTL_MS).toISOString();
+      return { session: this.view(existing), token };
+    }
+    if (existing) {
+      this.sessions.delete(existing.id);
+      await rm(existing.root, { recursive: true, force: true });
+    }
+    if (this.sessions.size + this.reservations.size >= 2) throw new Error('Preview session limit reached');
+    const id = randomUUID();
+    this.reservations.set(id, { id, missionId: agentId });
+    const temporary = path.join(this.root, `.tmp-${id}`);
+    const output = path.join(this.root, `preview-${id}`);
+    try {
+      await mkdir(temporary, { recursive: false });
+      const source = this.workspaces.workspacePath(agentId);
+      const previewData = await loadPreviewDataContract(source, this.sensitiveValues);
+      const allowedRoutes = [...new Set(previewData?.routes ?? [])];
+      const realized = path.join(temporary, 'source');
+      await mkdir(realized);
+      await this.realizeWebSource(source, realized);
+      const profile = await detectPreviewProfile(realized);
+      if (profile === 'static-html') await rename(realized, output);
+      else {
+        const built = path.join(temporary, 'output');
+        await this.runtime.prepare({ sourceRoot: realized, outputRoot: built, profile });
+        await rename(built, output);
+      }
+      if (await this.workspaces.fingerprintAgentWorkspace(agentId) !== workspaceHash) throw new Error('Agent workspace changed during preview preparation');
+      if (!await stat(path.join(output, 'index.html')).then((value) => value.isFile()).catch(() => false)) throw new Error('Preview output is missing index.html');
+      await rm(temporary, { recursive: true, force: true });
+      const token = randomBytes(32).toString('base64url');
+      const session: Session = { id, missionId: agentId, target: { kind: 'agent', workspaceHash }, profile, contentPath: `/api/agents/${agentId}/previews/${id}/content/`, expiresAt: new Date(this.now() + TTL_MS).toISOString(), previewDataHash: previewData?.hash ?? null, root: output, tokenHash: createHash('sha256').update(token).digest(), allowedRoutes, previewData };
       this.sessions.set(id, session);
       return { session: this.view(session), token };
     } catch (error) {
@@ -347,7 +405,7 @@ export class RevisionPreviewService {
       if (read.bytesRead !== info.size) throw new Error('Preview asset unavailable');
     } finally { await handle.close(); }
     const extension = path.extname(file).toLowerCase();
-    if (session.target.kind === 'workspace') {
+    if (session.target.kind !== 'design') {
       if (extension === '.html') {
         let html = session.profile === 'static-html' ? rewriteStaticPreviewHtml(bytes.toString('utf8'), session.contentPath) : bytes.toString('utf8');
         if (session.previewData?.mocks.length) html = this.injectPreviewDataAdapter(html, session);

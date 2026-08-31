@@ -12,6 +12,8 @@ export interface MissionWorkspaceInspection { state: "clean" | "changed" | "unav
 export interface DesignDraftInspection { unauthorizedPaths: string[]; invalidPaths: string[]; files: { indexHtml: string | null; stylesCss: string | null; contractJson: string | null; bundleJson: string | null } | null; baselineMatches: boolean; }
 export interface RevisionComparison { files: Array<{ path: string; operation: 'ADDED' | 'MODIFIED' | 'DELETED' }>; truncated: boolean; }
 export interface MissionWorkspacePort {
+  workspacePath(agentId: string): string;
+  fingerprintAgentWorkspace(agentId: string): Promise<string>;
   missionWorkspacePath(missionId: string): string;
   createMissionWorkspace(missionId: string, sourceAgentId?: string, expectedSourceHash?: string): Promise<string>;
   cleanupMissionProvisioning(missionId: string): Promise<void>;

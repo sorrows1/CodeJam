@@ -9,11 +9,25 @@ import type { DesignReferenceStore } from './design-reference-store.js';
 
 const missionId = '00000000-0000-4000-8000-000000000001';
 const revisionId = '00000000-0000-4000-8000-000000000002';
+const agentId = '00000000-0000-4000-8000-000000000009';
 const database = { missions: [{ id: missionId }], missionWorkspaceRevisions: [{ id: revisionId, missionId }], designRevisions: [], missionArtifacts: [] };
 const store = { snapshot: () => structuredClone(database) } as unknown as JsonStore;
 const references = {} as DesignReferenceStore;
 
 describe('RevisionPreviewService', () => {
+  it('previews a stable ready Agent workspace without granting source writes', async () => {
+    const source = await mkdtemp(path.join(tmpdir(), 'agent-preview-source-')); await writeFile(path.join(source, 'index.html'), '<main>current app</main>');
+    const root = await mkdtemp(path.join(tmpdir(), 'agent-preview-root-'));
+    const localStore = { snapshot: () => ({ agents: [{ id: agentId, status: 'ready' }], missions: [], playgroundImpactAdmissions: [] }) } as unknown as JsonStore;
+    const workspaces = { workspacePath: (id: string) => { if (id !== agentId) throw new Error('wrong Agent'); return source; }, fingerprintAgentWorkspace: async () => 'a'.repeat(64) } as MissionWorkspacePort;
+    const service = new RevisionPreviewService(localStore, workspaces, references, { async prepare() { throw new Error('not used'); } }, root); await service.initialize();
+    const created = await service.createAgent(agentId);
+    expect(created.session.target).toEqual({ kind: 'agent', workspaceHash: 'a'.repeat(64) });
+    expect(created.session.contentPath).toContain(`/api/agents/${agentId}/previews/`);
+    expect((await service.asset(agentId, created.session.id, created.token, 'index.html')).bytes.toString()).toContain('current app');
+    await service.stop(agentId, created.session.id);
+  });
+
   it('serves only an exact immutable static checkpoint with scoped authentication and stop', async () => {
     const source = await mkdtemp(path.join(tmpdir(), 'preview-source-')); await writeFile(path.join(source, 'index.html'), '<main>safe</main>');
     const root = await mkdtemp(path.join(tmpdir(), 'preview-root-'));

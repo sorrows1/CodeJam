@@ -11,6 +11,7 @@ import {
   pathExists,
   repoDir,
 } from "./local-poc-utils.mjs";
+import { BASELINE_PROMPT } from "./demo-scenario.mjs";
 
 const fixtureDir = path.join(repoDir, "demo", "intent-verification");
 const fixtureItems = ["package.json", "index.html", "src", "README.md"];
@@ -50,12 +51,8 @@ async function copyTree(source, destination) {
 async function chooseAgent(environment, requestedId) {
   const listed = await apiRequest(environment, "/api/agents");
   const agents = Array.isArray(listed?.agents) ? listed.agents : [];
-  if (requestedId) {
-    const agent = agents.find((item) => item.id === requestedId);
-    if (!agent) throw new Error(`Agent ${requestedId} was not found.`);
-    return { agent, reused: true };
-  }
-  const matches = agents.filter((item) => item.name === demoAgent.name && item.description === demoAgent.description);
+  const matches = requestedId ? agents.filter((item) => item.id === requestedId) : agents.filter((item) => item.name === demoAgent.name && item.description === demoAgent.description);
+  if (requestedId && matches.length === 0) throw new Error(`Agent ${requestedId} was not found.`);
   if (matches.length > 1) throw new Error("Multiple prepared Demo Builder Agents exist. Run npm run demo:reset before preparing the recording baseline again.");
   if (matches.length === 1) {
     const agent = matches[0];
@@ -66,18 +63,25 @@ async function chooseAgent(environment, requestedId) {
       apiRequest(environment, `/api/agents/${agent.id}/impact-admissions`),
       apiRequest(environment, "/api/missions"),
     ]);
-    const hasHistory = (runsResult.runs?.length ?? 0) > 0
-      || (messagesResult.messages?.length ?? 0) > 0
-      || (admissionsResult.admissions?.length ?? 0) > 0
-      || (missionsResult.missions ?? []).some((mission) => mission.participants?.some((participant) => participant.agentId === agent.id));
-    if (hasHistory) throw new Error("The prepared Demo Builder Agent has execution history. Run npm run demo:reset instead of overwriting authoritative demo state.");
-    return { agent, reused: true };
+    const messages = messagesResult.messages ?? [];
+    const admissions = admissionsResult.admissions ?? [];
+    const relatedMissions = (missionsResult.missions ?? []).filter((mission) => mission.participants?.some((participant) => participant.agentId === agent.id));
+    const hasHistory = (runsResult.runs?.length ?? 0) > 0 || messages.length > 0 || admissions.length > 0 || relatedMissions.length > 0;
+    if (!hasHistory) return { agent, reused: true, preserveWorkspace: false };
+    const admission = admissions.find((item) => item.prompt === BASELINE_PROMPT && item.status === "promoted" && item.missionId);
+    const mission = admission ? relatedMissions.find((item) => item.id === admission.missionId) : null;
+    const exactBaseline = messages.some((item) => item.role === "user" && item.content === BASELINE_PROMPT)
+      && admissions.length === 1
+      && relatedMissions.length === 1
+      && mission?.status === "completed";
+    if (!exactBaseline) throw new Error("The prepared Agent has history other than the one completed baseline Mission. Run npm run demo:reset instead of overwriting authoritative state.");
+    return { agent, reused: true, preserveWorkspace: true };
   }
   const created = await apiRequest(environment, "/api/agents", {
     method: "POST",
     body: JSON.stringify(demoAgent),
   });
-  return { agent: created.agent, reused: false };
+  return { agent: created.agent, reused: false, preserveWorkspace: false };
 }
 
 const argv = process.argv.slice(2);
@@ -101,18 +105,25 @@ try {
   if (!(await pathExists(instructionsPath)) || await isSymlink(instructionsPath) || !(await readFile(instructionsPath, "utf8")).includes("Platform-managed Agent instructions")) {
     throw new Error("Refusing seed: platform-managed AGENTS.md was not found.");
   }
-  await assertNoSymlinks(fixtureDir);
-  for (const item of fixtureItems) {
-    const source = path.join(fixtureDir, item);
-    const target = path.join(destination, item);
-    if (!(await pathExists(source)) || await isSymlink(source)) throw new Error(`Refusing seed: fixture path ${item} is missing or symlinked.`);
-    if (await isSymlink(target)) throw new Error(`Refusing seed: fixture target ${item} is symlinked.`);
-    if (await pathExists(target)) await assertNoSymlinks(target);
-    await copyTree(source, target);
+  if (!selected.preserveWorkspace) {
+    await assertNoSymlinks(fixtureDir);
+    for (const item of fixtureItems) {
+      const source = path.join(fixtureDir, item);
+      const target = path.join(destination, item);
+      if (!(await pathExists(source)) || await isSymlink(source)) throw new Error(`Refusing seed: fixture path ${item} is missing or symlinked.`);
+      if (await isSymlink(target)) throw new Error(`Refusing seed: fixture target ${item} is symlinked.`);
+      if (await pathExists(target)) await assertNoSymlinks(target);
+      await copyTree(source, target);
+    }
   }
-  console.log(`Seeded the intent-verification fixture into Agent "${agent.name}" (${agent.id}).`);
-  if (selected.reused) console.log("Reused the existing clean prepared Agent; no duplicate Agent was created.");
+  console.log(selected.preserveWorkspace ? `Preserved the completed real baseline Mission for Agent "${agent.name}" (${agent.id}).` : `Seeded the intent-verification source into Agent "${agent.name}" (${agent.id}).`);
+  if (selected.reused) console.log("Reused the existing prepared Agent; no duplicate Agent was created.");
   console.log(`Workspace: ${formatPathForMessage(destination)}`);
+  if (!selected.preserveWorkspace) {
+    console.log("One-time pre-recording step: submit this exact Playground prompt and complete its governed Mission:");
+    console.log(BASELINE_PROMPT);
+    console.log("Then rerun npm run demo:seed and npm run demo:doctor. The completed history will be preserved, not fabricated.");
+  }
   console.log("No UUID or LOCAL_POC_DATA_ROOT value is required; both were resolved automatically.");
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));

@@ -108,6 +108,9 @@ export class MissionService {
   async getPreview(missionId: string, sessionId: string) { try { return await this.previews.get(missionId, sessionId); } catch { throw new HttpError(404, 'Preview session not found'); } }
   async stopPreview(missionId: string, sessionId: string) { try { await this.previews.stop(missionId, sessionId); } catch { throw new HttpError(404, 'Preview session not found'); } }
   async getPreviewAsset(missionId: string, sessionId: string, token: string, assetPath: string) { try { return await this.previews.asset(missionId, sessionId, token, assetPath); } catch (error) { throw new HttpError(error instanceof Error && error.message.includes('authentication') ? 401 : 404, 'Preview asset unavailable'); } }
+  async createAgentPreview(agentId: string) { try { return await this.previews.createAgent(agentId); } catch (error) { throw new HttpError(error instanceof Error && error.message.includes('limit') ? 409 : 422, error instanceof Error ? error.message : 'Preview unavailable'); } }
+  async stopAgentPreview(agentId: string, sessionId: string) { try { await this.previews.stop(agentId, sessionId); } catch { throw new HttpError(404, 'Preview session not found'); } }
+  async getAgentPreviewAsset(agentId: string, sessionId: string, token: string, assetPath: string) { try { return await this.previews.asset(agentId, sessionId, token, assetPath); } catch (error) { throw new HttpError(error instanceof Error && error.message.includes('authentication') ? 401 : 404, 'Preview asset unavailable'); } }
   async shutdown(): Promise<void> { await this.previews.stopAll(); }
 
   listMissions(): Mission[] { return this.store.snapshot().missions.filter((mission) => mission.workspace.state !== 'provisioning').sort((left, right) => right.createdAt.localeCompare(left.createdAt)); }

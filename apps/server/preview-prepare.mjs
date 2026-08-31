@@ -55,7 +55,7 @@ const inlinePreparedViteEntry = async () => {
     const assetPath = href ? localOutputAsset(href) : null;
     if (!assetPath) continue;
     const css = escapeRawTextEndTag(await readFile(assetPath, 'utf8'), 'style');
-    html = html.replace(tag, `<style>${css}</style>`);
+    html = html.replace(tag, () => `<style>${css}</style>`);
     inlinedFiles.add(assetPath);
   }
 
@@ -67,7 +67,7 @@ const inlinePreparedViteEntry = async () => {
     const openingTag = tag.slice(0, tag.indexOf('>') + 1)
       .replace(/\s+src\s*=\s*(["'])[^"']+\1/i, '')
       .replace(/\s+crossorigin(?:\s*=\s*(["'])[^"']*\1)?/i, '');
-    html = html.replace(tag, `${openingTag}${javascript}</script>`);
+    html = html.replace(tag, () => `${openingTag}${javascript}</script>`);
     inlinedFiles.add(assetPath);
   }
 

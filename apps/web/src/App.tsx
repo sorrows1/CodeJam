@@ -16,6 +16,8 @@ const emptyForm = {
     "Help me build and test software in this workspace. Keep changes small and explain the result.",
 };
 
+type AgentPreviewSession = { id: string; agentId: string; workspaceHash: string; profile: string; contentPath: string; expiresAt: string };
+
 function formatTime(value: string): string {
   return new Intl.DateTimeFormat(undefined, {
     hour: "2-digit",
@@ -82,6 +84,8 @@ export default function App() {
   const [authRequired, setAuthRequired] = useState<boolean | null>(null);
   const [authInput, setAuthInput] = useState("");
   const [view, setView] = useState<"agents" | "missions">("agents");
+  const [agentPreview, setAgentPreview] = useState<AgentPreviewSession | null>(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
   const messageEnd = useRef<HTMLDivElement>(null);
   const selectedIdRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
@@ -222,6 +226,27 @@ export default function App() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const openAgentPreview = async () => {
+    if (!selected) return;
+    setPreviewBusy(true);
+    setError(null);
+    try {
+      const { session } = await api.createAgentPreview(selected.id);
+      setAgentPreview(session);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setPreviewBusy(false);
+    }
+  };
+
+  const closeAgentPreview = async () => {
+    const current = agentPreview;
+    setAgentPreview(null);
+    if (!current) return;
+    await api.stopAgentPreview(current.agentId, current.id).catch(() => undefined);
   };
 
   const deleteAgent = async () => {
@@ -456,6 +481,13 @@ export default function App() {
               </div>
               <div className="header-actions">
                 <button
+                  className="button button-primary"
+                  onClick={() => void openAgentPreview()}
+                  disabled={busy || previewBusy || selected.status !== "ready"}
+                >
+                  {previewBusy ? <Spinner /> : "Preview current app"}
+                </button>
+                <button
                   className="button button-ghost"
                   onClick={() => setShowSettings((value) => !value)}
                   disabled={busy || selected.status === "busy"}
@@ -669,6 +701,18 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {agentPreview && (
+        <div className="modal-backdrop agent-preview-backdrop" role="presentation" onMouseDown={() => void closeAgentPreview()}>
+          <section className="agent-preview-modal" role="dialog" aria-modal="true" aria-label="Current Agent application" onMouseDown={(event) => event.stopPropagation()}>
+            <header>
+              <div><span className="eyebrow">Current Agent workspace</span><h2>Application before the new request</h2><p>Read-only temporary preview · workspace {agentPreview.workspaceHash.slice(0, 10)}</p></div>
+              <button className="button button-primary" onClick={() => void closeAgentPreview()}>Close preview</button>
+            </header>
+            <iframe title="Current Agent application" sandbox="allow-scripts" src={agentPreview.contentPath} />
+          </section>
+        </div>
+      )}
 
       {showCreate && (
         <div className="modal-backdrop" onMouseDown={() => setShowCreate(false)}>

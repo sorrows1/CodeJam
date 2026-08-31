@@ -39,7 +39,9 @@ The intent-verification fixture contains no credentials, `.env`, `.codex`,
 logs, or committed generated output. Seed it through the bounded control-plane
 path with `npm run demo:seed`, or select an existing Agent with
 `npm run demo:seed -- --agent <agent-uuid>`. Do not pass a workspace path or
-edit JsonStore directly.
+edit JsonStore directly. The visible pre-recording Mission must be completed
+through the real Playground, approval, verification, and publication path;
+the seeder preserves that authority history but never fabricates it.
 Mission artifacts, errors, events, and traces are bounded observable evidence;
 they do not contain raw prompts or private model reasoning.
 

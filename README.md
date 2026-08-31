@@ -59,11 +59,21 @@ Open <http://localhost:3000>. In a second terminal, prepare the supported demo s
 
 ```bash
 npm run demo:seed
+```
+
+For a new reset, complete the one-time real baseline Playground Mission shown
+in [docs/DEMO.md](docs/DEMO.md). Then rerun the seed and validation commands:
+
+```bash
+npm run demo:seed
 npm run demo:doctor
 npm run demo:verify
 ```
 
-This creates or prepares the demo Agent/workspace through the repository's bounded setup path. No UUID copying or manual JsonStore authority fabrication is part of the demo flow.
+The first seed creates the source Agent/app. The second seed recognizes and
+preserves the exact completed baseline Mission instead of overwriting it. No
+UUID copying, automated human approval, or manual JsonStore authority
+fabrication is part of the demo flow.
 
 To choose an Agent explicitly:
 
@@ -163,6 +173,8 @@ npm run demo:setup
 npm run demo:reset
 npm run poc
 # in a second terminal after the POC is healthy:
+npm run demo:seed
+# Complete Prompt A once through Playground and its governed Mission, then:
 npm run demo:seed
 npm run demo:doctor
 npm run demo:verify
