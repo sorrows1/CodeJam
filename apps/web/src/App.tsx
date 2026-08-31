@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, ApiError, setAuthToken } from "./api";
-import type { Agent, AgentRun, Message, SystemInfo } from "./types";
+import type { Agent, AgentRun, Message, PlaygroundImpactAdmission, SystemInfo } from "./types";
+import MissionPanel from "./MissionPanel";
 
 const starterPrompts = [
   "Create a small TypeScript CLI that prints a weather summary from sample JSON.",
@@ -35,6 +36,35 @@ function Spinner() {
   return <span className="spinner" aria-label="Loading" />;
 }
 
+function impactStatusTitle(status: PlaygroundImpactAdmission["status"]): string {
+  switch (status) {
+    case "planning": return "Checking what this request would change";
+    case "promoting": return "This change needs design approval";
+    case "promoted": return "Moved to a protected build";
+    case "admitted": return "Continuing as ordinary Playground work";
+    case "confirmation_required": return "Conductor needs your confirmation";
+    default: return "Request stopped safely";
+  }
+}
+
+function LaunchpadSidebar({ view, system, primaryLabel, onPrimary, onShowAgents, onShowMissions, children }: {
+  view: 'agents' | 'missions';
+  system: SystemInfo | null;
+  primaryLabel: string;
+  onPrimary: () => void;
+  onShowAgents: () => void;
+  onShowMissions: () => void;
+  children: ReactNode;
+}) {
+  return <aside className="sidebar">
+    <div className="brand"><div className="brand-mark">A</div><div><strong>Agent Launchpad</strong><span>{system?.runtimeProvider === 'container' ? 'Local container · Codex CLI' : 'ECS / Docker · Codex CLI'}</span></div></div>
+    <button className="button button-primary create-button" onClick={onPrimary}><span>＋</span>{primaryLabel}</button>
+    <div className="view-switch" role="tablist" aria-label="Workspace views"><button className={view === 'agents' ? 'active' : ''} onClick={onShowAgents}>Agents</button><button className={view === 'missions' ? 'active' : ''} onClick={onShowMissions}>Missions</button></div>
+    {children}
+    <div className="runtime-card"><span className="eyebrow">Runtime</span><strong>{system?.runtime ?? 'Checking…'}</strong><span>{system?.arkModel ?? 'Model not configured'}{system?.containerEngine ? ' · ' + system.containerEngine : ''}</span></div>
+  </aside>;
+}
+
 export default function App() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -45,14 +75,18 @@ export default function App() {
   const [form, setForm] = useState(emptyForm);
   const [prompt, setPrompt] = useState("");
   const [activeRun, setActiveRun] = useState<AgentRun | null>(null);
+  const [impactAdmissions, setImpactAdmissions] = useState<PlaygroundImpactAdmission[]>([]);
+  const [activeAdmission, setActiveAdmission] = useState<PlaygroundImpactAdmission | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [authRequired, setAuthRequired] = useState<boolean | null>(null);
   const [authInput, setAuthInput] = useState("");
+  const [view, setView] = useState<"agents" | "missions">("agents");
   const messageEnd = useRef<HTMLDivElement>(null);
   const selectedIdRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
   const pollingRunIds = useRef(new Set<string>());
+  const pollingAdmissionIds = useRef(new Set<string>());
   selectedIdRef.current = selectedId;
 
   const selected = useMemo(
@@ -98,14 +132,20 @@ export default function App() {
 
   useEffect(() => {
     setActiveRun(null);
+    setActiveAdmission(null);
+    setImpactAdmissions([]);
     setShowSettings(false);
     if (!selectedId) {
       setMessages([]);
       return;
     }
-    void Promise.all([refreshMessages(selectedId), api.runs(selectedId)])
-      .then(([, result]) => {
+    void Promise.all([refreshMessages(selectedId), api.runs(selectedId), api.impactAdmissions(selectedId)])
+      .then(([, result, impactResult]) => {
         if (selectedIdRef.current !== selectedId) return;
+        setImpactAdmissions(impactResult.admissions);
+        const latestAdmission = impactResult.admissions.at(-1) ?? null;
+        setActiveAdmission(latestAdmission);
+        if (latestAdmission && ["planning", "promoting"].includes(latestAdmission.status)) void pollImpact(latestAdmission.id, selectedId).catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)));
         const latest = result.runs[0] ?? null;
         setActiveRun(latest);
         if (latest && ["queued", "running"].includes(latest.status)) {
@@ -220,6 +260,26 @@ export default function App() {
     }
   };
 
+  const pollImpact = async (admissionId: string, agentId: string) => {
+    if (pollingAdmissionIds.current.has(admissionId)) return;
+    pollingAdmissionIds.current.add(admissionId);
+    try {
+      while (mountedRef.current) {
+        await new Promise((resolve) => window.setTimeout(resolve, 900));
+        if (!mountedRef.current) return;
+        const result = await api.impactAdmissions(agentId);
+        const admission = result.admissions.find((item) => item.id === admissionId);
+        if (!admission) return;
+        if (selectedIdRef.current === agentId) { setImpactAdmissions(result.admissions); setActiveAdmission(admission); }
+        if (!["planning", "promoting"].includes(admission.status)) {
+          await Promise.all([refreshMessages(agentId), refreshAgents()]);
+          if (admission.admittedRunId) await pollRun(admission.admittedRunId, agentId);
+          return;
+        }
+      }
+    } finally { pollingAdmissionIds.current.delete(admissionId); }
+  };
+
   const sendMessage = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!selected || !prompt.trim()) return;
@@ -227,22 +287,36 @@ export default function App() {
     setPrompt("");
     setError(null);
     try {
-      const result = await api.sendMessage(selected.id, content);
+      const result = await api.sendMessage(selected.id, content, crypto.randomUUID());
       if (selectedIdRef.current === selected.id) {
         setMessages((current) => [...current, result.message]);
-        setActiveRun(result.run);
+        setImpactAdmissions((current) => [...current, result.admission]);
+        setActiveAdmission(result.admission);
+        setActiveRun(null);
       }
       setAgents((current) =>
         current.map((agent) =>
           agent.id === selected.id ? { ...agent, status: "busy" } : agent,
         ),
       );
-      await pollRun(result.run.id, selected.id);
+      await pollImpact(result.admission.id, selected.id);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
       setActiveRun(null);
       await refreshAgents();
     }
+  };
+
+  const confirmImpact = async (admission: PlaygroundImpactAdmission, choice: "governed" | "nonvisual") => {
+    setError(null);
+    try {
+      const result = await api.confirmImpact(admission.agentId, admission.id, choice);
+      setActiveAdmission(result.admission);
+      setImpactAdmissions((current) => current.map((item) => item.id === result.admission.id ? result.admission : item));
+      if (["planning", "promoting"].includes(result.admission.status)) await pollImpact(result.admission.id, admission.agentId);
+      else if (result.admission.admittedRunId) await pollRun(result.admission.admittedRunId, result.admission.agentId);
+      await refreshAgents();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
   };
 
   const unlock = async (event: React.FormEvent) => {
@@ -306,31 +380,17 @@ export default function App() {
     );
   }
 
+  if (view === "missions") {
+    return <MissionPanel agents={agents} system={system} onRefreshAgents={refreshAgents} render={({ sidebar, workspace, overlay, onNewMission }) => <div className="app-shell">
+      <LaunchpadSidebar view="missions" system={system} primaryLabel="New Mission" onPrimary={onNewMission} onShowAgents={() => setView('agents')} onShowMissions={() => setView('missions')}>{sidebar}</LaunchpadSidebar>
+      <main className="main mission-main">{workspace}</main>
+      {overlay}
+    </div>} />;
+  }
+
   return (
     <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark">A</div>
-          <div>
-            <strong>Agent Launchpad</strong>
-            <span>
-              {system?.runtimeProvider === "container"
-                ? "Local container · Codex CLI"
-                : "ECS / Docker · Codex CLI"}
-            </span>
-          </div>
-        </div>
-
-        <button
-          className="button button-primary create-button"
-          onClick={() => {
-            setForm(emptyForm);
-            setShowCreate(true);
-          }}
-        >
-          <span>＋</span> Create Agent
-        </button>
-
+      <LaunchpadSidebar view="agents" system={system} primaryLabel="Create Agent" onPrimary={() => { setForm(emptyForm); setShowCreate(true); }} onShowAgents={() => setView('agents')} onShowMissions={() => setView('missions')}>
         <div className="sidebar-label">
           <span>Your Agents</span>
           <span>{agents.length}</span>
@@ -358,15 +418,7 @@ export default function App() {
           )}
         </nav>
 
-        <div className="runtime-card">
-          <span className="eyebrow">Runtime</span>
-          <strong>{system?.runtime ?? "Checking…"}</strong>
-          <span>
-            {system?.arkModel ?? "Ark model not configured"}
-            {system?.containerEngine ? " · " + system.containerEngine : ""}
-          </span>
-        </div>
-      </aside>
+      </LaunchpadSidebar>
 
       <main className="main">
         {!system?.arkConfigured || !system?.codexAvailable ? (
@@ -376,7 +428,7 @@ export default function App() {
               <strong>Runtime configuration needed</strong>
               <p>
                 {!system?.arkConfigured
-                  ? "Set ARK_API_KEY and ARK_MODEL in .env before using the Playground."
+                  ? "Set MODEL_API_KEY, MODEL_NAME, and MODEL_BASE_URL in .env before using the Playground."
                   : system.runtimeProvider === "container"
                     ? "The local container engine or Agent Runtime image is unavailable. Rerun npm run poc."
                     : "Codex CLI was not found. Use the Docker image or install @openai/codex."}
@@ -520,6 +572,20 @@ export default function App() {
                     </article>
                   ))
                 )}
+                {impactAdmissions.map((admission) => (
+                  <article className={`impact-card impact-card-${admission.status}`} key={admission.id}>
+                    <div className="impact-card__mark">{admission.status === "promoted" ? "M" : admission.status === "admitted" ? "✓" : "◇"}</div>
+                    <div className="impact-card__body">
+                      <span className="eyebrow">Conductor request check</span>
+                      <strong>{impactStatusTitle(admission.status)}</strong>
+                      <p>{admission.reason ?? "Conductor is checking the request against the real workspace before allowing changes to become permanent."}</p>
+                      {admission.proposal?.surfaces.length ? <div className="impact-card__surfaces">{admission.proposal.surfaces.map((surface) => <span key={surface.id}>{surface.route} · {surface.states.length || 1} state{surface.states.length === 1 ? "" : "s"}</span>)}</div> : null}
+                      {admission.status === "confirmation_required" ? <div className="impact-card__actions"><button className="button button-primary" onClick={() => void confirmImpact(admission, "governed")}>Protect this change</button>{admission.allowNonvisualConfirmation ? <button className="button button-ghost" onClick={() => void confirmImpact(admission, "nonvisual")}>Continue as non-UI work</button> : null}</div> : null}
+                      {admission.status === "promoted" && admission.missionId ? <div className="impact-card__actions"><button className="button button-primary" onClick={() => setView("missions")}>Open Mission</button><code>{admission.missionId.slice(0, 8)}</code></div> : null}
+                      <details><summary>Technical details</summary><small>Workspace checkpoint {admission.workspaceHash.slice(0, 10)} · Playground thread {admission.threadId ? "preserved" : "new"}</small></details>
+                    </div>
+                  </article>
+                ))}
                 {activeRun && ["queued", "running"].includes(activeRun.status) && (
                   <article className="message message-assistant thinking">
                     <div className="message-meta">
@@ -559,6 +625,7 @@ export default function App() {
                   disabled={
                     selected.status === "stopped" ||
                     selected.status === "busy" ||
+                    (activeAdmission != null && ["planning", "confirmation_required", "promoting"].includes(activeAdmission.status)) ||
                     activeRun != null && ["queued", "running"].includes(activeRun.status)
                   }
                   rows={3}
@@ -573,6 +640,7 @@ export default function App() {
                       !prompt.trim() ||
                       selected.status === "stopped" ||
                       selected.status === "busy" ||
+                      (activeAdmission != null && ["planning", "confirmation_required", "promoting"].includes(activeAdmission.status)) ||
                       (activeRun != null && ["queued", "running"].includes(activeRun.status))
                     }
                     aria-label="Send message"

@@ -15,7 +15,6 @@
   --red: #c55353;
   --shadow: 0 24px 60px rgba(39, 38, 33, 0.12);
 }
-
 * {
   box-sizing: border-box;
 }
@@ -961,6 +960,27 @@ textarea:focus {
   }
 }
 
+.view-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-top: 18px;
+  padding: 4px;
+  border-radius: 10px;
+  background: #2e2e2a;
+}
+
+.view-switch button {
+  border: 0;
+  border-radius: 7px;
+  padding: 8px 4px;
+  color: #aaa9a2;
+  background: transparent;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.view-switch button.active { color: white; background: #514b72; }
 @media (max-width: 900px) {
   .app-shell {
     grid-template-columns: 76px minmax(0, 1fr);
@@ -1096,3 +1116,27 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 }
+
+.impact-card {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 14px;
+  margin: 16px auto;
+  width: min(760px, calc(100% - 36px));
+  padding: 18px;
+  border: 1px solid #d7d2c7;
+  border-radius: 16px;
+  background: #fffdf8;
+  box-shadow: 0 12px 32px rgb(45 42 35 / 7%);
+}
+.impact-card__mark { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; background: #eee9de; color: #3f5c4b; font-weight: 800; }
+.impact-card__body { display: grid; gap: 7px; min-width: 0; }
+.impact-card__body strong { color: #242b26; font-size: 15px; }
+.impact-card__body p, .impact-card__body small { margin: 0; color: #6b716c; line-height: 1.45; }
+.impact-card-promoted { border-color: #a9c9b5; background: #f6fbf7; }
+.impact-card-admitted { border-color: #c7d6c7; }
+.impact-card-stale, .impact-card-failed { border-color: #ddb6ad; background: #fff8f5; }
+.impact-card__surfaces { display: flex; flex-wrap: wrap; gap: 6px; }
+.impact-card__surfaces span { padding: 5px 8px; border-radius: 999px; background: #f0eee7; color: #555e57; font-size: 12px; }
+.impact-card__actions { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.impact-card__actions code { color: #667068; font-size: 12px; }

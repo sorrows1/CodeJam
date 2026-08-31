@@ -1,50 +1,46 @@
 export type AgentStatus = "ready" | "busy" | "stopped" | "error";
 export type RunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
-
-export interface Agent {
-  id: string;
-  name: string;
-  description: string;
-  instructions: string;
-  status: AgentStatus;
-  workspacePath: string;
-  codexThreadId: string | null;
-  lastError: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Message {
-  id: string;
-  agentId: string;
-  runId: string;
-  role: "user" | "assistant";
-  content: string;
-  createdAt: string;
-}
-
-export interface AgentRun {
-  id: string;
-  agentId: string;
-  status: RunStatus;
-  prompt: string;
-  output: string | null;
-  error: string | null;
-  usage: {
-    inputTokens?: number;
-    cachedInputTokens?: number;
-    outputTokens?: number;
-  } | null;
-  createdAt: string;
-}
-
-export interface SystemInfo {
-  arkConfigured: boolean;
-  arkBaseUrl: string;
-  arkModel: string | null;
-  codexAvailable: boolean;
-  codexSandboxMode: string;
-  runtimeProvider: "local-process" | "container";
-  containerEngine: string | null;
-  runtime: string;
-}
+export interface Agent { id: string; name: string; description: string; instructions: string; status: AgentStatus; workspacePath: string; codexThreadId: string | null; lastError: string | null; createdAt: string; updatedAt: string; }
+export interface Message { id: string; agentId: string; runId: string; role: "user" | "assistant"; content: string; createdAt: string; }
+export interface AgentRun { id: string; agentId: string; status: RunStatus; prompt: string; output: string | null; error: string | null; usage: { inputTokens?: number; cachedInputTokens?: number; outputTokens?: number } | null; createdAt: string; context: { kind: "playground" } | { kind: "playground_impact"; admissionId: string } | { kind: "playground_candidate"; admissionId: string } | { kind: "mission"; missionId: string; taskId: string; attemptId: string }; }
+export interface PlaygroundImpactAdmission { id: string; requestId: string; agentId: string; prompt: string; status: "planning" | "confirmation_required" | "staging" | "publishing" | "admitted" | "promoting" | "promoted" | "stale" | "failed"; decision: "nonvisual" | "governed" | "confirmation_required" | null; allowNonvisualConfirmation: boolean; reason: string | null; proposal: { routes: string[]; entrypoints: string[]; sharedLayouts: string[]; componentDependencies: string[]; predictedWritePaths: string[]; surfaces: Array<{ id: string; route: string; entrypoint: string; sourcePaths: string[]; sharedDependencies: string[]; states: string[]; viewport: { width: number; height: number } }>; effects: { visual: boolean; interaction: boolean; accessibility: boolean; display: boolean }; evidence: string[]; uncertainty: "low" | "medium" | "high" } | null; workspaceHash: string; agentUpdatedAt: string; threadId: string | null; proposalRunId: string; admittedRunId: string | null; candidateRunId?: string | null; candidateThreadId?: string | null; candidateWorkspaceHash?: string | null; changedFiles?: Array<{ path: string; operation: "ADDED" | "MODIFIED" | "DELETED" }>; diffComplete?: boolean; inventoryTruncated?: boolean; publicationTransactionId?: string | null; missionId: string | null; error: string | null; createdAt: string; updatedAt: string; completedAt: string | null; }
+export type MissionStatus = "pending" | "running" | "paused" | "blocked" | "recovered_paused" | "completed" | "failed" | "cancelled";
+export type IntentWorkflowPhase = "designing" | "awaiting_approval" | "implementing" | "verifying" | "repairing" | "awaiting_intervention" | "completed";
+export type MissionTaskStage = "design" | "implement" | "repair";
+export type MissionTaskStatus = "pending" | "running" | "paused" | "blocked" | "interrupted" | "completed" | "failed" | "stale" | "cancelled";
+export type TaskAttemptStatus = "queued" | "running" | "completed" | "failed" | "cancelled" | "interrupted";
+export interface MissionParticipant { agentId: string; order: number; snapshot: { name: string; description: string; instructions: string; agentUpdatedAt: string } }
+export interface MissionWorkflow { phase: IntentWorkflowPhase; designerAgentId: string; builderAgentId: string; latestDesignRevisionId: string | null; approvedDesignRevisionId: string | null; implementedWorkspaceRevisionId: string | null; currentVerificationRunId: string | null; repairCycle: number; maxRepairCycles: number; }
+export interface MissionWorkspace { owner: "conductor"; key: string; state: "provisioning" | "ready" | "unavailable"; source: { kind: "agent_workspace"; agentId: string; agentUpdatedAt: string; impactAdmissionId: string | null; contentHash: string | null }; currentRevisionId: string | null; revisionStatus: "unversioned" | "clean" | "uncheckpointed"; nextRevisionSequence: number; }
+export interface Mission { id: string; goal: string; status: MissionStatus; participants: MissionParticipant[]; workflow: MissionWorkflow; workspace: MissionWorkspace; currentTaskId: string | null; nextEventSequence: number; activeRecoveryCommandId: string | null; tokenBudget: number | null; createdAt: string; updatedAt: string; startedAt: string | null; completedAt: string | null; }
+export interface MissionTask { id: string; missionId: string; order: number; stage: MissionTaskStage; assignedAgentId: string; title: string; instruction: string; inputDesignRevisionId: string | null; inputVerificationRunId: string | null; inputWorkspaceRevisionId: string | null; repairCycle: number | null; status: MissionTaskStatus; authoritativeAttemptId: string | null; authorityVersion: number; inputArtifactIds: string[]; outputArtifactIds: string[]; outputWorkspaceRevisionId: string | null; createdAt: string; updatedAt: string; startedAt: string | null; completedAt: string | null; }
+export interface TaskAttempt { id: string; missionId: string; taskId: string; agentId: string; attemptNumber: number; authorityVersion: number; stage: MissionTaskStage; inputDesignRevisionId: string | null; inputVerificationRunId: string | null; inputWorkspaceRevisionId: string | null; repairCycle: number | null; status: TaskAttemptStatus; runId: string | null; runtimeThreadId: string | null; inputArtifactIds: string[]; outputArtifactId: string | null; outputWorkspaceRevisionId: string | null; usage: AgentRun["usage"]; error: { category: string; message: string } | null; supersededAt: string | null; supersededByAttemptId: string | null; startedByRecoveryCommandId: string | null; createdAt: string; startedAt: string | null; completedAt: string | null; updatedAt: string; }
+export interface MissionArtifact { id: string; missionId: string; taskId: string | null; attemptId: string | null; kind: string; mediaType: string; content: string | null; storage: { kind: "inline" } | { kind: "external"; key: string }; sha256: string; workspaceRevisionId: string | null; createdBy: { kind: string; agentId: string | null }; originalByteLength: number; truncated: boolean; createdAt: string; }
+export interface DesignRevision { id: string; missionId: string; version: number; parentRevisionId: string | null; status: "draft" | "approved" | "superseded"; sourceTaskId: string; sourceAttemptId: string; packageArtifactId: string; packageHash: string; previewArtifactId: string; previewHash: string; contractArtifactId: string; contractHash: string; feedbackArtifactId: string | null; createdAt: string; approvedAt: string | null; supersededAt: string | null; reviewedSurfaceIds?: string[] | null; reviewedBundleHash?: string | null; }
+export interface DesignReferenceSurface { id: string; title: string; route: string; entrypoint: string; states: string[]; viewport: { width: number; height: number }; previewHtml: string; contractJson: string; }
+export interface DesignReference { revision: DesignRevision; primarySurfaceId: string; surfaces: DesignReferenceSurface[]; previewHtml: string; contractJson: string; }
+export interface VerificationCheck { id: string; kind: "text" | "element" | "interaction" | "runtime"; label: string; passed: boolean; details: string; }
+export interface VerificationRun { id: string; missionId: string; designRevisionId: string; workspaceRevisionId: string; cycle: number; status: "queued" | "running" | "passed" | "failed" | "error"; correlationId: string; checks: VerificationCheck[]; consoleErrors: string[]; pageErrors: string[]; url: string | null; durationMs: number | null; referenceScreenshotArtifactId: string | null; actualScreenshotArtifactId: string | null; reportArtifactId: string | null; visualDifference: number | null; error: { category: "infrastructure"; message: string } | null; createdAt: string; startedAt: string | null; completedAt: string | null; updatedAt: string; }
+export interface MissionEvent { id: string; missionId: string; sequence: number; type: string; taskId: string | null; attemptId: string | null; agentId: string | null; actor: string; details: Record<string, string | number | boolean | null>; createdAt: string; }
+export interface MissionRevision { id: string; sequence: number; label: string; origin: string; boundaries: Array<Record<string, string>>; parentRevisionId: string | null; restoredFromRevisionId: string | null; createdBy: string; taskId: string | null; createdAt: string; }
+export interface MissionBudgetView { tokenLimit: number | null; usage: { inputTokens: number; cachedInputTokens: number; outputTokens: number; totalTokens: number; measuredRunCount: number; unmeasuredTerminalRunCount: number; partialUsageRunCount: number }; remainingTokens: number | null; exhausted: boolean; mayOvershootActiveAttempt: boolean; policy: string; }
+export type MissionPrimaryActionId = "generate_design" | "retry_design" | "approve_design" | "run_builder" | "finalize_build" | "start_verification" | "retry_verification" | "run_repair" | "accept_implementation";
+export type ImplementationAdmissionRejection = "wrong_phase" | "wrong_mission_status" | "approval_missing" | "approved_revision_not_current" | "approved_revision_not_approved" | "approved_revision_wrong_mission" | "implementation_task_missing" | "implementation_task_not_current" | "implementation_task_binding_mismatch" | "reference_artifacts_missing" | "reference_binding_invalid" | "reference_integrity_failed" | "workspace_revision_missing" | "workspace_revision_stale" | "workspace_changed" | "agent_not_assigned" | "agent_not_reserved" | "agent_not_ready" | "task_not_pending" | "authoritative_attempt_missing" | "authoritative_run_missing" | "recovery_limit_reached" | "budget_exhausted";
+export interface ImplementationAdmissionView { allowed: boolean; reason: ImplementationAdmissionRejection | null; message: string | null; }
+export interface MissionImplementationReviewView { precheckVerificationRunId: string | null; accepted: boolean; canRequestChanges: boolean; requestChangesReason: string | null; }
+export interface MissionProductView { state: "designing" | "approval_required" | "implementation_unlocked" | "implementation_blocked" | "building" | "implementation_checking" | "implementation_review" | "repairing" | "awaiting_verification" | "verifying" | "verification_failed" | "verification_error" | "complete" | "stopped" | "degraded"; currentStage: "design" | "approval" | "build" | "review" | "verify" | "complete"; headline: string; explanation: string; rail: Array<{ id: "intent" | "design" | "approval" | "build" | "review" | "verify"; label: string; state: "complete" | "current" | "upcoming" }>; implementationLock: "locked" | "unlocked"; implementationAdmission: ImplementationAdmissionView; implementationReview: MissionImplementationReviewView; completionAuthority: "pending" | "denied" | "authorized"; failure: { source: "attempt" | "verification" | "inconsistency"; category: string; title: string; message: string } | null; primaryAction: { id: MissionPrimaryActionId } | null; }
+export interface MissionSummary { mission: Mission; product: Pick<MissionProductView, "state" | "headline" | "currentStage" | "completionAuthority">; }
+export interface MissionAgentAvailability { agentId: string; availableForMission: boolean; reservingMissionId: string | null; reservingMissionGoal: string | null; reason: "available" | "agent_not_ready" | "reserved"; }
+export interface MissionRuntimeActivity { stage: "design" | "implement" | "repair"; attemptId: string; attemptNumber: number; status: "running" | "completed"; startedAt: string; completedAt: string | null; usage: AgentRun["usage"]; activities: Array<{ label: string; observedAt: string }>; }
+export interface MissionInspectorView { actor: "Designer" | "Builder" | "Verifier"; state: "running" | "recent" | "unavailable"; attempt: Pick<TaskAttempt, "id" | "attemptNumber" | "authorityVersion" | "stage" | "status" | "runtimeThreadId" | "startedAt" | "completedAt"> | null; verification: Pick<VerificationRun, "id" | "status" | "designRevisionId" | "workspaceRevisionId" | "correlationId" | "startedAt" | "completedAt" | "durationMs"> | null; activity: Array<{ label: string; observedAt: string }>; files: Array<{ operation: "WRITTEN"; path: string }>; checks: Array<{ label: string; status: "passed" | "failed" | "running"; details: string | null }>; usage: AgentRun["usage"]; }
+export type MissionHistoryEntry =
+  | { kind: "attempt"; id: string; createdAt: string; attemptId: string; taskId: string; stage: MissionTaskStage; status: TaskAttemptStatus; authorityVersion: number; inputDesignRevisionId: string | null; inputVerificationRunId: string | null; inputWorkspaceRevisionId: string | null; outputWorkspaceRevisionId: string | null; usage: AgentRun["usage"]; failure: { category: string; message: string } | null; events: Array<{ type: string; createdAt: string }>; files: Array<{ path: string; operation: "ADDED" | "MODIFIED" | "DELETED" | "WRITE" }>; filesAvailable: boolean; filesTruncated: boolean; live: MissionRuntimeActivity | null }
+  | { kind: "verification"; id: string; createdAt: string; runId: string; status: VerificationRun["status"]; cycle: number; correlationId: string; designRevisionId: string; workspaceRevisionId: string; checks: VerificationCheck[]; consoleErrors: string[]; pageErrors: string[]; durationMs: number | null; referenceScreenshotArtifactId: string | null; actualScreenshotArtifactId: string | null; current: boolean; stale: boolean; mode: "precheck" | "final" };
+export interface MissionDetail { history: MissionHistoryEntry[]; }
+export type RecoveryCapability<T> = ({ allowed: true } & T) | { allowed: false; reason: string };
+export interface MissionRecoveryCommand { id: string; status: "applying" | "completed" | "failed" | "interrupted"; resultAttemptId: string | null; error: string | null; }
+export interface AgentWorkspacePublication { id: string; missionId: string; agentId: string; designRevisionId: string; workspaceRevisionId: string; verificationRunId: string; status: "pending" | "publishing" | "published" | "failed" | "interrupted"; attemptCount: number; threadDisposition: "reset"; error: string | null; updatedAt: string; completedAt: string | null; }
+export interface MissionDetail { inspector: MissionInspectorView; mission: Mission; product: MissionProductView; publication: AgentWorkspacePublication | null; budget: MissionBudgetView; timeline: MissionTimeline; runtimeActivity: MissionRuntimeActivity | null; tasks: MissionTask[]; attempts: TaskAttempt[]; artifacts: MissionArtifact[]; designRevisions: DesignRevision[]; verificationRuns: VerificationRun[]; currentArtifactId: string | null; events: MissionEvent[]; revisions: MissionRevision[]; workspaceInspection: { state: "clean" | "changed" | "unavailable" | "unchecked_running"; currentRevisionId: string | null; displayPath: string }; currentRevisionId: string | null; displayPath: string; recovery: { activeCommand: MissionRecoveryCommand | null; retryCurrentDesign: RecoveryCapability<{ taskId: string; attemptId: string; inputWorkspaceRevisionId: string }>; resumeImplementation: RecoveryCapability<{ taskId: string; attemptId: string; runId: string; inputWorkspaceRevisionId: string; designRevisionId: string }>; retryVerification: RecoveryCapability<{ verificationRunId: string; designRevisionId: string; workspaceRevisionId: string }>; stopPreserving: { allowed: boolean; reason: string | null } }; }
+export interface MissionTimelineEvent { id: string; sequence: number; type: string; taskId: string | null; attemptId: string | null; agentId: string | null; actor: string; createdAt: string; summary: string; }
+export interface MissionTimeline { events: MissionTimelineEvent[]; totalEventCount: number; earliestReturnedSequence: number | null; }
+export interface SystemInfo { arkConfigured: boolean; arkBaseUrl: string; arkModel: string | null; codexAvailable: boolean; codexSandboxMode: string; runtimeProvider: "local-process" | "container"; containerEngine: string | null; runtime: string; }

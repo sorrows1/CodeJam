@@ -1,250 +1,186 @@
-# Volc Agent Launchpad
+# Conductor
 
-A minimal Agent platform for three-day middleware hackathons. It provides Agent
-CRUD, a browser Playground, persistent workspaces, and Codex CLI backed by the
-Volcengine Ark Responses API.
+Conductor is intent-governance middleware for autonomous coding Agents:
 
-Run it locally with Docker, Colima, or rootless Podman, or deploy it to
-Volcengine ECS.
+> Agents can write correct code and still build the wrong product. Conductor makes approved intent enforceable.
 
-> [!WARNING]
-> This is a single-user proof of concept. It intentionally has no identity,
-> tracing, audit, or hardened sandbox middleware. Do not use production data or
-> credentials. See [SECURITY.md](SECURITY.md).
+The Starter Kit remains the ordinary Agent platform. Conductor adds a server-side decision and adoption boundary around work that may change the user-facing product:
 
-## Screenshots
-
-### Agent Playground
-
-![Agent Playground showing lifecycle controls, starter prompts, and the Codex Runtime](docs/assets/playground.jpg)
-
-### Create an Agent
-
-![Create Agent form with name, description, and workspace instructions](docs/assets/create-agent.jpg)
-
-## Features
-
-- React and TypeScript Web UI
-- Agent create, edit, start, stop, delete, and multi-turn chat
-- Fastify control plane with asynchronous Run state
-- Persistent Agent workspaces and Codex sessions
-- Disposable Docker, Colima, or Podman container for each local turn
-- Docker and Terraform deployment paths for Volcengine ECS
-
-## Requirements
-
-- Node.js 22+
-- npm 10+
-- Docker, Colima, or Podman
-- A Volcengine Ark API key and endpoint that supports the Responses API
-
-Codex CLI is included in the Runtime image and is not required on the host.
-
-## Local browser SOP
-
-### 1. Check the local tools
-
-Install Node.js 22+ and one supported container engine, then verify them:
-
-```bash
-node --version
-npm --version
-docker --version        # Docker Desktop, Docker Engine, or Colima
-podman --version        # Use this instead when running Podman
+```text
+Playground request
+-> impact evidence
+   -> proven nonvisual: publish normally
+   -> frontend / ambiguous: protected Mission
+-> review exact design + requirements
+-> approve
+-> Builder
+-> independent real-app checks
+-> review built result
+-> separate final PASS
+-> verified publication back to the Agent
 ```
 
-Only one container engine is required. Codex CLI is already included in the
-Runtime image.
+A Builder success is deliberately not completion. The coding Agent can produce the implementation, but it cannot approve its own interpretation or certify its own result for publication.
 
-### 2. Clone the repository
+## Quick start
+
+Requirements: Node.js 22+, npm 10+, Docker Desktop/Colima/Podman, and an OpenAI Responses-compatible model endpoint for live Agent Runs. The POC launcher is Node-based and works from PowerShell, Command Prompt, macOS/Linux shells, and Git Bash.
 
 ```bash
-git clone <repository-url> volc-agent-launchpad
-cd volc-agent-launchpad
+npm ci
 ```
 
-Skip this step when already working from the repository root.
+Before the first run, copy `.env.example` to `.env`, replace the demo access-token placeholder with a unique URL-safe value of at least 24 characters, and fill in the model values:
 
-### 3. Start the POC
+```text
+APP_AUTH_TOKEN
+MODEL_API_KEY
+MODEL_NAME
+MODEL_BASE_URL
+```
+
+`npm run poc` loads that file automatically, uses `.local/conductor-live` for its state, selects a running Docker/Podman engine, installs dependencies when needed, and builds/reuses the local images.
+
+Install the browser used by deterministic verification once for a new checkout:
 
 ```bash
-ARK_API_KEY=your-ark-api-key \
-ARK_MODEL=ep-your-endpoint-id \
+npm run demo:setup
+```
+
+For every clean recording rehearsal, stop any running POC, reset the bounded
+local demo state, and then start the production-style POC:
+
+```bash
+npm run demo:reset
 npm run poc
 ```
 
-The first run installs Node.js dependencies and builds the Runtime image. The
-script automatically selects Docker, Colima, or Podman.
-
-### 4. Open the browser
-
-Visit <http://localhost:3000>, or open it from the terminal:
+Open <http://localhost:3000>. In a second terminal, prepare the supported demo state:
 
 ```bash
-open http://localhost:3000       # macOS
-xdg-open http://localhost:3000   # Linux desktop
+npm run demo:seed
+npm run demo:doctor
+npm run demo:verify
 ```
 
-In the Web UI:
+This creates or prepares the demo Agent/workspace through the repository's bounded setup path. No UUID copying or manual JsonStore authority fabrication is part of the demo flow.
 
-1. Select **Create Agent**.
-2. Enter a name, description, and workspace instructions.
-3. Select **Create Agent** again.
-4. Enter a task in the Playground, for example:
+To choose an Agent explicitly:
 
-   ```text
-   Create a TypeScript hello-world CLI, add a test, and run it.
-   ```
+```text
+npm run demo:seed -- --agent <agent-uuid>
+```
 
-The Agent can write files, run commands, and continue the same Codex session in
-later messages.
+On Linux, if Playwright system dependencies are missing, use `npx playwright install --with-deps chromium`.
 
-### 5. Stop and resume
+The model API key is supplied only through the server/runtime environment. Never put it in source, browser storage, Mission data, logs, or screenshots.
 
-Press `Ctrl+C` in the startup terminal. The script removes temporary Runtime
-containers but keeps Agent workspaces and conversations.
+For active development, use `npm run poc -- --dev`. Use `npm run poc` for the stable production-style rehearsal and recording.
 
-- macOS state: `~/.volc-agent-launchpad/`
-- Linux state: `.local/`
-- Custom location: set `LOCAL_POC_DATA_ROOT`
+For the exact three-minute scenario, see [docs/DEMO.md](docs/DEMO.md). For fresh state, use [FRESH_STATE_RESET.md](FRESH_STATE_RESET.md). If setup is unclear, run `npm run demo:doctor`; it performs read-only checks and never prints the model API key, starts a Mission, or resets state.
 
-Run the same `npm run poc` command to continue later.
+## Three-minute proof
 
-### Select a specific container engine
+The recording uses **one complete scenario**:
 
-Force Podman when multiple engines are installed:
+1. select one ready Agent and briefly show its already-built real application;
+2. submit one ambiguous product request through Playground;
+3. show a real Agent/model/file/tool/Runtime action and Conductor's impact evidence;
+4. show the request enter a protected Mission because its real impact is user-facing or ambiguous;
+5. review and approve the exact proposed design plus acceptance requirements;
+6. run the Builder and visibly show that **Builder success is still not completion**;
+7. run independent checks against the actual captured application;
+8. review the built result, then show the separate final PASS authorize publication;
+9. return to the same application and demonstrate the newly published feature;
+10. show the Agent/platform ready and controllable afterward.
+
+The recommended demo task is:
+
+> **Give users a way to review recent agent activity and quickly filter it by status.**
+
+It intentionally does not say `frontend`, `React`, `UI`, `CSS`, `page`, or `component`; the demo proves that Conductor governs the actual work rather than relying only on prompt keywords.
+
+The deterministic browser proof can be run without another model call:
 
 ```bash
-CONTAINER_ENGINE=podman \
-ARK_API_KEY=your-ark-api-key \
-ARK_MODEL=ep-your-endpoint-id \
+npm run demo:verify
+```
+
+It supplements the live Agent scenario; it does not replace the required real Agent Run.
+
+## What Conductor governs
+
+### Playground impact
+
+Playground first plans impact without authoritative source writes. If execution is needed to resolve impact, Conductor uses an isolated candidate workspace. The complete actual diff is the final evidence:
+
+- proven nonvisual work can publish transactionally through the ordinary Playground path;
+- frontend-affecting or ambiguous work is prevented from silently publishing and is promoted into the protected Mission path.
+
+### Exact design approval
+
+The Designer can inspect the real application and propose a rendered design plus acceptance requirements. Conductor validates, bounds, hashes, and protects that exact reference.
+
+The user deliberately reviews every affected surface and its requirements before approval. Merely opening a surface does not count as review. The Builder is denied server-side until the exact current design is approved.
+
+### Builder isolation and non-terminal success
+
+The Builder receives the protected approved reference as read-only input and executes in Mission context rather than the Agent's ordinary Playground thread.
+
+A successful Builder Run is captured as a bound workspace revision, but success is non-terminal: it cannot by itself complete or publish the Mission.
+
+### Independent actual-app verification
+
+The system-owned BrowserVerifier runs the actual captured application and checks:
+
+- required content and accessible elements;
+- required interactions and observable results;
+- runtime/page errors;
+- bounded visual fidelity for contract-significant elements against the protected rendered design.
+
+For visual fidelity, the browser measures objective rendered facts such as geometry, typography, and key colors on the approved reference and the built app. Small rendering drift is tolerated; material deviation fails verification. The protected design remains the source of truth.
+
+This is not pixel-perfect screenshot equality, whole-DOM matching, or VLM judging.
+
+The first PASS allows the user to review the exact built result but does not complete the Mission. User acceptance is also non-terminal. A separate current final verifier PASS is required before the exact verified workspace can be transactionally published back to the source Agent.
+
+### Failure and recovery
+
+- semantic/interaction/visual FAIL keeps completion blocked;
+- verifier infrastructure ERROR is separate and retryable against the same captured implementation without rerunning Builder;
+- one automatic Repair may follow the initial failed app check;
+- one additional Repair may be explicitly requested by the user when eligible;
+- no third Repair, retry-until-green loop, failing-result acceptance, or final-failure auto-Repair exists;
+- stale/superseded attempts, approvals, verification results, and publication state cannot grant completion.
+
+The existing Agent CRUD and Playground remain ordinary platform paths. Messages and Runs remain durable. Agents are rejected server-side only when an unfinished Mission legitimately reserves them. Successful publication resets unsafe stale Runtime thread context while preserving the authoritative filesystem and durable Playground history.
+
+## Development and checks
+
+```bash
+npm ci
+npm run demo:setup
+npm run demo:reset
 npm run poc
-```
-
-Colima uses `CONTAINER_ENGINE=docker` because it exposes the Docker CLI.
-
-For a clean Linux host, follow the
-[rootless Podman setup](docs/LOCAL_POC.md#rootless-podman-on-linux).
-
-## Docker Compose
-
-Create and edit the configuration:
-
-```bash
-./scripts/bootstrap-local.sh
-```
-
-Required values in `.env`:
-
-```dotenv
-ARK_API_KEY=your-ark-api-key
-ARK_MODEL=ep-your-endpoint-id
-APP_AUTH_TOKEN=replace-with-at-least-24-random-characters
-```
-
-Start the application:
-
-```bash
-docker compose up --build
-```
-
-Open <http://localhost:3000>. Stop it without deleting Agent data:
-
-```bash
-docker compose down
-```
-
-## Development
-
-```bash
-npm install
-cp .env.example .env
-npm install --global @openai/codex@0.111.0
-npm run dev
-```
-
-- Web UI: <http://localhost:5173>
-- API: <http://localhost:3000>
-
-Use local paths in `.env` when running outside Docker:
-
-```dotenv
-APP_DATA_DIR=.data
-AGENT_WORKSPACE_ROOT=workspaces
-CODEX_HOME=codex-home
-```
-
-## Deployment
-
-- [Existing Linux ECS with Docker](docs/DEPLOYMENT.md#existing-linux-ecs)
-- [Complete Volcengine environment with Terraform](docs/DEPLOYMENT.md#terraform-deployment)
-- [Local Docker, Colima, and Podman details](docs/LOCAL_POC.md)
-
-The existing-ECS script deploys from the current source tree:
-
-```bash
-cp .env.example .env.production
-./scripts/deploy-existing-ecs.sh .env.production
-```
-
-The Terraform path provisions VPC, subnet, security group, ECS, and EIP:
-
-```bash
-cp deploy/volcengine/terraform.tfvars.example \
-  deploy/volcengine/terraform.tfvars
-./scripts/deploy-volcengine.sh
-```
-
-## Configuration
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `ARK_API_KEY` | Required | Ark model API key. |
-| `ARK_MODEL` | Required | Responses-capable endpoint or model ID. |
-| `ARK_BASE_URL` | Beijing v3 endpoint | Ark OpenAI-compatible API URL. |
-| `APP_AUTH_TOKEN` | Empty on loopback | Shared demo token; use 24+ random characters remotely. |
-| `RUNTIME_PROVIDER` | `local-process` | `container` for disposable local Runtime containers. |
-| `CODEX_SANDBOX_MODE` | `workspace-write` | Codex inner sandbox mode. |
-| `CODEX_TIMEOUT_MS` | `600000` | Maximum duration of one turn. |
-| `LOCAL_POC_DATA_ROOT` | Platform-specific | Local metadata, workspace, and session directory. |
-
-See [.env.example](.env.example) for all Runtime and resource-limit options.
-
-## How it works
-
-```mermaid
-flowchart LR
-    UI["React Web UI"] --> API["Fastify control plane"]
-    API --> Store["JSON metadata and Agent workspaces"]
-    API --> Runtime{"Runtime provider"}
-    Runtime -->|Local POC| Container["Disposable Docker / Colima / Podman container"]
-    Runtime -->|ECS profile| Codex["Codex CLI in application container"]
-    Container --> Ark["Volcengine Ark Responses API"]
-    Codex --> Ark
-```
-
-The first turn uses `codex exec`; later turns resume the stored Codex thread.
-Deleting an Agent archives its workspace under `workspaces/.deleted/`.
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for component and extension
-boundaries.
-
-## Validation
-
-```bash
+# in a second terminal after the POC is healthy:
+npm run demo:seed
+npm run demo:doctor
+npm run demo:verify
 npm run check
-terraform fmt -check -recursive deploy/volcengine
-docker compose config
+git diff --check
 ```
 
-## Documentation
+`npm run check` runs workspace typechecks, server tests, and both builds. See [docs/DEMO.md](docs/DEMO.md) for the production-style live rehearsal.
 
-- [Architecture](docs/ARCHITECTURE.md)
-- [Local POC](docs/LOCAL_POC.md)
-- [Deployment](docs/DEPLOYMENT.md)
-- [Hackathon extension guide](docs/HACKATHON_EXTENSION_GUIDE.md)
-- [Security policy](SECURITY.md)
-- [Contributing](CONTRIBUTING.md)
+## Architecture and limitations
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the one-page data-flow/trust-boundary diagram.
+
+Conductor is intentionally a bounded local POC rather than a deployment platform. Runtime containers are not hardened multi-tenant sandboxes; the shared browser token is not production identity/RBAC. Verification supports the application profiles documented by the current source rather than claiming universal framework coverage.
+
+There is no pixel/VLM judge, whole-DOM visual matcher, deployment system, generalized workflow engine, migration framework, or autonomous retry-until-green loop.
+
+See [SECURITY.md](SECURITY.md) for trust-boundary and secret-handling limitations.
 
 ## License
 

@@ -1,0 +1,145 @@
+.mission-glassbox section {
+  padding: 2px 0 13px;
+  border-bottom: 1px solid var(--line);
+}
+
+.mission-glassbox h4 {
+  display: flex;
+  justify-content: space-between;
+  margin: 18px 0 9px;
+  font-size: 13px;
+}
+
+.mission-glassbox h4 small,
+.mission-observation-list time,
+.mission-check-summary small,
+.mission-inspector-empty,
+.mission-glassbox__note {
+  color: var(--muted);
+}
+
+.mission-current-context {
+  display: grid;
+  gap: 3px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid #dedbd3;
+  border-radius: 12px;
+  background: #f5f3ed;
+}
+.mission-current-context span { color: var(--muted); font-size: 10px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
+.mission-current-context strong { font-size: 15px; }
+.mission-current-context small { color: var(--muted); font-size: 11px; line-height: 1.35; }
+
+.mission-history-section > header,
+.mission-history-detail > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.mission-history-section > header span,
+.mission-history-detail > header span { color: var(--muted); font-size: 10px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
+.mission-history-section > header h3,
+.mission-history-detail > header h3 { margin: 2px 0 0; font-size: 16px; }
+.mission-history-section > header > small { color: var(--muted); font-size: 10px; white-space: nowrap; }
+.mission-history-detail > header > strong { padding: 5px 7px; border-radius: 7px; background: #efede7; font-size: 10px; white-space: nowrap; }
+.mission-history-detail > header > strong.is-current { background: #daf4e5; color: #23784b; }
+
+.mission-history-groups { display: grid; gap: 8px; margin-top: 12px; }
+.mission-history-group { overflow: hidden; border: 1px solid #dfdcd4; border-radius: 10px; background: #fff; }
+.mission-history-group.is-selected { border-color: #b8acef; box-shadow: 0 0 0 1px rgba(92, 75, 190, .08); }
+.mission-history-group__summary { display: grid; width: 100%; gap: 3px; padding: 10px 11px; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.mission-history-group__summary span { font-size: 12px; font-weight: 750; }
+.mission-history-group__summary strong { color: var(--muted); font-size: 10px; font-weight: 600; }
+.mission-history-group details { border-top: 1px solid #ece9e2; }
+.mission-history-group summary { padding: 7px 11px; color: var(--muted); font-size: 10px; cursor: pointer; }
+.mission-history-records { display: grid; padding: 0 7px 7px; gap: 4px; }
+.mission-history-records button { display: grid; gap: 2px; padding: 7px 8px; border: 0; border-radius: 7px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.mission-history-records button:hover,
+.mission-history-records button.is-active { background: #f2efff; }
+.mission-history-records span { font-size: 10px; font-weight: 700; }
+.mission-history-records small { color: var(--muted); font-size: 9px; }
+
+.mission-history-detail { margin-top: 16px; padding-top: 15px; border-top: 1px solid var(--line); }
+.mission-history-facts { margin: 12px 0 2px; }
+.mission-history-facts > div { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 8px; padding: 6px 0; }
+.mission-history-facts dt { color: var(--muted); font-size: 10px; }
+.mission-history-facts dd { margin: 0; overflow-wrap: anywhere; font-size: 11px; text-align: right; }
+.mission-history-failure { margin-top: 12px; padding: 10px 11px !important; border: 1px solid #f0c8c5 !important; border-radius: 9px; background: #fff5f4; }
+.mission-history-failure h4 { margin-top: 0; }
+.mission-history-failure strong { font-size: 11px; }
+.mission-history-failure p { margin-bottom: 0; color: #7e3c39; font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+.mission-history-errors { display: grid; gap: 6px; }
+.mission-history-errors li { padding: 7px 8px; border-radius: 7px; background: #fff3f2; color: #8b3d38; font-size: 10px; line-height: 1.4; overflow-wrap: anywhere; }
+
+.mission-glassbox ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.mission-observation-list li {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 9px;
+  padding: 7px 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.mission-observation-list time {
+  font-size: 11px;
+}
+
+.mission-file-list li {
+  display: grid;
+  gap: 4px;
+  padding: 8px 0;
+}
+
+.mission-file-list strong {
+  color: #278b59;
+  font-size: 10px;
+  letter-spacing: .07em;
+}
+
+.mission-file-list code,
+.mission-check-summary small {
+  overflow-wrap: anywhere;
+}
+
+.mission-file-list code {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.mission-check-summary li {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.mission-check-summary li > span {
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: #ececf0;
+  font-size: 10px;
+}
+
+.mission-check-summary li.is-passed > span { background: #daf4e5; color: #238451; }
+.mission-check-summary li.is-failed > span { background: #ffe0e1; color: #c5373d; }
+.mission-check-summary li.is-running > span { background: #e9e5ff; color: var(--purple); }
+.mission-check-summary li div { display: grid; }
+.mission-check-summary li strong { font-size: 12px; line-height: 1.35; }
+.mission-check-summary small { margin-top: 3px; font-size: 11px; line-height: 1.4; }
+.mission-inspector-empty { margin: 0; padding: 8px 0; font-size: 12px; line-height: 1.45; }
+.mission-glassbox__note { margin: 14px 0 0; font-size: 11px; line-height: 1.45; }
+
+.mission-feed-content > .mission-failure {
+  margin: 14px 0 4px;
+}

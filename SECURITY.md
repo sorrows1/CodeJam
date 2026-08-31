@@ -1,7 +1,7 @@
 # Security policy
 
-Volc Agent Launchpad is a hackathon proof of concept. Only the latest revision
-on the default branch is supported.
+Conductor is a hackathon proof of concept. Only the latest revision on the
+default branch is supported.
 
 ## Report a vulnerability
 
@@ -17,13 +17,15 @@ credentials, personal data, or exploit details in an issue.
 - Ordinary local containers, not hardened multi-tenant sandboxes
 - Broad outbound network access
 - Prompt-triggered command and file execution
-- Ark key available to the server and active Runtime container
-- Ark key stored in Terraform POC state
+- Model API key available to the server and active Runtime container
+- Model API key stored in Terraform POC state
+- Redaction is bounded pattern-based protection, not a guarantee against every
+  possible secret-like string. Use dedicated demo credentials and data roots.
 
 ## Safe use
 
 - Use a dedicated development machine or disposable ECS instance.
-- Use a scoped, revocable Ark key and a unique `APP_AUTH_TOKEN`.
+- Use a scoped, revocable model API key and a unique `APP_AUTH_TOKEN`.
 - Keep local use on loopback and restrict ECS Web and SSH CIDRs.
 - Add HTTPS before sending the shared token over an untrusted network.
 - Never mount production data or provide Volcengine account AK/SK to Agents.
@@ -32,3 +34,25 @@ credentials, personal data, or exploit details in an issue.
 Codex uses `workspace-write` when Landlock is available. On unsupported kernels,
 startup warns and relies on the outer Docker or rootless Podman boundary. This
 fallback is not tenant isolation.
+
+The intent-verification fixture contains no credentials, `.env`, `.codex`,
+logs, or committed generated output. Seed it through the bounded control-plane
+path with `npm run demo:seed`, or select an existing Agent with
+`npm run demo:seed -- --agent <agent-uuid>`. Do not pass a workspace path or
+edit JsonStore directly.
+Mission artifacts, errors, events, and traces are bounded observable evidence;
+they do not contain raw prompts or private model reasoning.
+
+## Secret audit
+
+Before submission, inspect the current tree and reachable Git history without
+printing candidate values. Check `.env.example`, Runtime argv/environment
+handling, logger redaction, generated clean-demo JsonStore state, Mission
+artifacts/events/revisions, browser storage/network/DOM, terminal output, and
+committed screenshots. `gitleaks` is useful when installed; otherwise record a
+bounded pattern scan and its limitations in `docs/SECURITY_AUDIT.md`.
+
+The model API key must flow only through the server/Runtime environment. It must not
+appear in API responses, `/api/system`, JsonStore, Mission evidence, browser
+storage, logs, or screenshots. The shared auth token is held in browser memory
+and authorization/cookie headers are logger-redacted.

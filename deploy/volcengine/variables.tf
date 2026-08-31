@@ -59,8 +59,8 @@ variable "repository_ref" {
   default     = "main"
 }
 
-variable "ark_api_key" {
-  description = "Volcengine Ark API key. Supplied through TF_VAR_ark_api_key."
+variable "model_api_key" {
+  description = "Configured model API key. Supplied through TF_VAR_model_api_key."
   type        = string
   sensitive   = true
 }
@@ -75,13 +75,13 @@ variable "app_auth_token" {
   }
 }
 
-variable "ark_model" {
-  description = "Ark endpoint/model ID supporting the Responses API."
+variable "model_name" {
+  description = "Configured model name supporting the Responses API."
   type        = string
 }
 
-variable "ark_base_url" {
-  description = "Ark OpenAI-compatible API base URL."
+variable "model_base_url" {
+  description = "Configured OpenAI-compatible API base URL."
   type        = string
   default     = "https://ark.cn-beijing.volces.com/api/v3"
 }

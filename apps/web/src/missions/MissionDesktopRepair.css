@@ -1,0 +1,595 @@
+/* Desktop corrective layer. Shared shell/theme continues to come from the starter. */
+.mission-main {
+  height: 100dvh;
+  min-height: 0;
+  max-height: 100dvh;
+}
+
+.mission-workspace {
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  background: #f4f3ef;
+}
+
+.mission-workstream {
+  min-height: 0;
+  scrollbar-gutter: stable;
+  overflow-anchor: none;
+  background:
+    radial-gradient(circle at 78% -8%, rgba(105, 84, 217, .055), transparent 26%),
+    #f7f6f2;
+}
+
+.mission-header {
+  padding: 25px 38px 20px;
+  background: rgba(251, 250, 247, .96);
+}
+
+.mission-header h1 {
+  max-width: 900px;
+  font-size: 26px;
+}
+
+.mission-feed {
+  max-width: 1280px;
+  padding: 28px 34px 72px;
+}
+
+.mission-feed-item {
+  max-width: 860px;
+  padding-bottom: 22px;
+}
+
+.mission-feed-item.is-artifact {
+  width: 100%;
+  max-width: 1160px;
+}
+
+.mission-feed-avatar {
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px #f7f6f2;
+}
+
+.mission-design-card,
+.mission-verification-card {
+  margin-top: 12px;
+  padding: 20px;
+  border-color: #d9d7cf;
+  background: #fff;
+  box-shadow: 0 14px 38px rgba(39, 38, 33, .085);
+}
+
+.mission-design-card__header {
+  margin-bottom: 13px;
+}
+
+.mission-design-card__header strong {
+  font-size: 16px;
+}
+
+.mission-design-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+  padding: 2px 0;
+}
+
+.mission-design-toolbar > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.mission-design-toolbar > div:first-child strong {
+  font-size: 13px;
+}
+
+.mission-design-toolbar > div:first-child span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.mission-design-actions {
+  margin-top: 0;
+  flex-wrap: nowrap;
+}
+
+.mission-design-actions .button {
+  min-height: 36px;
+  padding-inline: 13px;
+  font-size: 12px;
+}
+
+.mission-design-preview-shell {
+  min-height: 280px;
+  border-color: #d8d6ce;
+  background: #e9e8e2;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.55);
+}
+
+.scaled-design-preview {
+  background: #fff;
+}
+
+.scaled-design-preview iframe {
+  overflow: hidden;
+}
+
+.mission-preview-notice {
+  border-color: #d5cef8;
+  background: #f3f0ff;
+}
+
+.mission-contract-summary {
+  margin-top: 14px;
+  padding: 18px;
+  background: #f9f8f4;
+}
+
+.mission-contract-summary h4 {
+  font-size: 15px;
+}
+
+.mission-contract-summary section > span,
+.mission-contract-summary p > span {
+  font-size: 11px;
+}
+
+.mission-contract-summary ul,
+.mission-contract-summary p strong {
+  font-size: 13px;
+}
+
+.mission-technical-evidence {
+  display: block;
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid #eceae3;
+  color: var(--muted);
+}
+
+.mission-technical-evidence summary {
+  width: max-content;
+  margin-left: auto;
+}
+
+.mission-design-card > footer {
+  margin-top: 8px;
+  font-size: 11px;
+}
+
+.mission-preview-dialog {
+  padding: 18px;
+}
+
+.mission-preview-dialog__surface {
+  width: min(1540px, 97vw);
+  height: min(960px, 96dvh);
+  background: #fbfaf7;
+}
+
+.mission-preview-dialog__stage {
+  padding: 18px;
+  background: #deddd7;
+}
+
+/* Current implementation evidence is intentionally dominant during Review/Verify. */
+.mission-current-evidence {
+  width: 100%;
+  max-width: 1260px;
+  margin: 0 auto;
+  padding: 26px 34px 4px;
+}
+
+.mission-current-evidence .mission-verification-card {
+  margin: 0;
+  padding: 24px;
+  border-radius: 16px;
+}
+
+.mission-verification-card > header {
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.mission-verification-card > header > div {
+  display: grid;
+  gap: 4px;
+}
+
+.mission-verification-card > header span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.mission-verification-card > header h3 {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.3;
+}
+
+.mission-verification-card > header > strong {
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: #f2f0e9;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.mission-verification-card__intro {
+  max-width: 900px;
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.mission-verification-comparison {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 22px;
+}
+
+.mission-verification-comparison figure {
+  margin: 0;
+  padding: 0;
+}
+
+.mission-verification-figure-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 9px;
+}
+
+.mission-verification-figure-header > div {
+  display: grid;
+  gap: 3px;
+}
+
+.mission-verification-figure-header figcaption {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 750;
+}
+
+.mission-verification-figure-header small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.mission-verification-figure-header .button {
+  min-height: 34px;
+  margin: 0;
+  padding: 0 12px;
+  font-size: 11px;
+}
+
+.mission-verification-media,
+.mission-verification-empty {
+  display: grid;
+  width: 100%;
+  min-height: 430px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #d8d6ce;
+  border-radius: 12px;
+  background: #ecebe5;
+}
+
+.mission-verification-media img {
+  display: block;
+  width: 100%;
+  max-height: 700px;
+  object-fit: contain;
+  background: #fff;
+}
+
+.mission-verification-media.is-design {
+  min-height: 520px;
+  background: #deddd7;
+}
+
+.mission-verification-media iframe {
+  display: block;
+  width: 100%;
+  height: 620px;
+  border: 0;
+  background: #fff;
+}
+
+.mission-verification-empty {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.mission-verification-checks {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.mission-verification-checks__heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 5px;
+}
+
+.mission-verification-checks__heading strong {
+  font-size: 14px;
+}
+
+.mission-verification-checks__heading span {
+  color: var(--muted);
+  font-size: 11px;
+  text-align: right;
+}
+
+.mission-check-list > div {
+  grid-template-columns: 26px minmax(0, 1fr);
+  padding: 12px 0;
+  font-size: 13px;
+}
+
+.mission-check-list > div > span {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.mission-check-list .is-pass { color: var(--green); }
+.mission-check-list .is-fail { color: var(--red); }
+.mission-check-list small { font-size: 12px; line-height: 1.45; }
+
+.mission-verification-technical {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.mission-verification-technical summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.mission-evidence-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(24, 24, 21, .78);
+}
+
+.mission-evidence-lightbox__surface {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(1600px, 97vw);
+  height: min(1000px, 96dvh);
+  overflow: hidden;
+  border-radius: 16px;
+  background: #f7f6f2;
+  box-shadow: 0 24px 80px rgba(0,0,0,.28);
+}
+
+.mission-evidence-lightbox__surface > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.mission-evidence-lightbox__surface > header > div {
+  display: grid;
+  gap: 2px;
+}
+
+.mission-evidence-lightbox__surface > header span {
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.mission-evidence-lightbox__content {
+  min-height: 0;
+  padding: 18px;
+  overflow: auto;
+  background: #deddd7;
+}
+
+.mission-evidence-lightbox__content img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  min-width: min(100%, 900px);
+  height: auto;
+  margin: 0 auto;
+  background: #fff;
+}
+
+.mission-evidence-lightbox__content iframe {
+  display: block;
+  width: 100%;
+  min-height: 100%;
+  height: 820px;
+  border: 0;
+  background: #fff;
+}
+
+/* These selectors deliberately outrank the base Mission grid placement. */
+.mission-workspace > .mission-inspector {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  min-height: 0;
+  background: #faf9f5;
+  box-shadow: -10px 0 30px rgba(39, 38, 33, .025);
+}
+
+.mission-inspector__header,
+.mission-inspector-tabs {
+  position: relative;
+  z-index: 2;
+}
+
+.mission-inspector__header {
+  padding: 17px 20px;
+  background: #faf9f5;
+}
+
+.mission-inspector-tabs {
+  background: #fff;
+}
+
+.mission-inspector__body {
+  scrollbar-gutter: stable;
+  background: #faf9f5;
+}
+
+.mission-governance,
+.mission-glassbox {
+  padding: 17px 20px 30px;
+}
+
+.mission-glassbox__hero {
+  padding: 15px;
+  border-radius: 12px;
+}
+
+.mission-glassbox__hero h3 {
+  font-size: 15px;
+}
+
+.mission-workspace > .mission-action-dock {
+  grid-column: 1;
+  grid-row: 2;
+  position: relative;
+  bottom: auto;
+  min-height: 78px;
+  padding: 13px 34px 14px;
+  border-top-color: #d8d6ce;
+  background: rgba(251, 250, 247, .995);
+  box-shadow: 0 -10px 30px rgba(39, 38, 33, .075);
+  z-index: 5;
+}
+
+.mission-action-dock__feedback {
+  min-width: 0;
+}
+
+.mission-action-dock__feedback small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.mission-action-dock__status {
+  gap: 4px;
+}
+
+.mission-action-dock__status strong {
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.mission-action-dock__status span {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.mission-action-dock__actions .button {
+  min-height: 42px;
+  padding-inline: 18px;
+}
+
+.mission-action-dock.is-implementation_unlocked .mission-action-dock__status strong,
+.mission-action-dock.is-implementation_review .mission-action-dock__status strong {
+  color: #4334a8;
+}
+
+.mission-action-dock.is-implementation_blocked .mission-action-dock__status strong,
+.mission-action-dock.is-repairing .mission-action-dock__status strong {
+  color: #a56a14;
+}
+
+.mission-governance dd.is-required {
+  color: #a56a14;
+  font-weight: 700;
+}
+
+@media (max-width: 1280px) {
+  .mission-main .mission-workspace { grid-template-columns: minmax(0, 1fr) 300px; }
+  .mission-header { padding-inline: 26px; }
+  .mission-feed,
+  .mission-current-evidence { padding-inline: 26px; }
+  .mission-workspace > .mission-action-dock { padding-inline: 26px; }
+  .mission-design-toolbar { align-items: flex-start; flex-direction: column; }
+  .mission-verification-media { min-height: 360px; }
+  .mission-verification-media.is-design { min-height: 440px; }
+  .mission-verification-media iframe { height: 520px; }
+}
+
+@media (max-width: 900px) {
+  .mission-main .mission-workspace { grid-template-columns: minmax(0, 1fr); }
+  .mission-workspace > .mission-inspector { display: none; }
+  .mission-workspace > .mission-action-dock { grid-column: 1; padding: 12px 14px; }
+  .mission-mobile-governance {
+    display: flex;
+    gap: 8px;
+    padding: 10px 14px;
+    overflow-x: auto;
+    border-bottom: 1px solid #dedbd3;
+    background: #fbfaf7;
+  }
+  .mission-mobile-governance > span {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    min-width: 58px;
+    gap: 3px;
+    color: #77736b;
+    font-size: 12px;
+  }
+  .mission-mobile-governance > span.is-complete { color: #277d62; }
+  .mission-mobile-governance small { color: inherit; font-size: 9px; }
+  .mission-header { align-items: flex-start; flex-direction: column; gap: 12px; padding: 18px 14px 15px; }
+  .mission-header h1 { font-size: 21px; }
+  .mission-header__actions { width: 100%; }
+  .mission-header__actions .button { flex: 1; }
+  .mission-feed { padding: 22px 14px 54px; }
+  .mission-feed-item { grid-template-columns: 34px minmax(0, 1fr); gap: 10px; }
+  .mission-feed-avatar { width: 34px; height: 34px; }
+  .mission-feed-item::before { top: 34px; left: 16px; }
+  .mission-action-dock { align-items: stretch; flex-direction: column; gap: 10px; }
+  .mission-action-dock__actions { width: 100%; flex-wrap: wrap; }
+  .mission-action-dock__actions .button { flex: 1; }
+  .mission-current-evidence { padding: 16px 14px 2px; }
+  .mission-current-evidence .mission-verification-card { padding: 16px; }
+  .mission-verification-card > header,
+  .mission-verification-figure-header,
+  .mission-verification-checks__heading { align-items: flex-start; flex-direction: column; }
+  .mission-verification-checks__heading span { text-align: left; }
+  .mission-verification-media,
+  .mission-verification-media.is-design { min-height: 280px; }
+  .mission-verification-media iframe { height: 420px; }
+}
+
+@media (max-width: 680px) {
+  .mission-main {
+    height: calc(100dvh - 65px);
+    max-height: calc(100dvh - 65px);
+  }
+}

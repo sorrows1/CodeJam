@@ -1,135 +1,145 @@
 # Local POC
 
-The local profile runs the React/Fastify control plane on macOS or Linux and
-starts every Codex turn in a disposable Docker, Colima, or Podman container.
-Only the Volcengine Ark model API is remote.
+The local POC runs the React/Fastify control plane and disposable Agent
+Runtime containers. The launcher is implemented in Node, so the same npm
+commands work on Windows, macOS, and Linux. Only the configured model API
+is remote.
 
-## Start
+## First-time setup
 
 Requirements:
 
 - Node.js 22+
-- Docker, Colima, or Podman
-- An Ark API key and Responses-capable endpoint
+- npm 10+
+- Docker Desktop, Colima, or Podman
+- A model API key and Responses-capable endpoint
 
-```bash
-ARK_API_KEY=your-ark-api-key ARK_MODEL=ep-your-endpoint-id npm run poc
+Copy `.env.example` to `.env` using your editor or file manager and fill in
+`MODEL_API_KEY`, `MODEL_NAME`, and `MODEL_BASE_URL`. The launcher reads `.env` and `.env.local`
+automatically; shell-specific `export` or `KEY=value command` syntax is not
+needed.
+
+Then run:
+
+```text
+npm ci
+npm run demo:setup
+npm run poc
 ```
 
-Open <http://localhost:3000>. Press `Ctrl+C` to stop the server and remove this
-instance's remaining Runtime containers.
+Open <http://localhost:3000>. `npm run poc` automatically:
 
-Force an engine with `CONTAINER_ENGINE=docker` or
-`CONTAINER_ENGINE=podman`. Colima uses the Docker CLI.
+- installs npm dependencies if `node_modules` is missing;
+- uses `.local/conductor-live` as the persistent local state root;
+- detects a running Docker or Podman engine (and can start Colima/Podman
+  machines where supported);
+- builds the disposable Agent Runtime image if it is missing;
+- builds the network-isolated verifier image if it is missing; and
+- starts the production-style control plane.
 
-## Data and Runtime
+The deterministic browser fixtures need the one-time `npm run demo:setup`
+browser install. On Linux, if Chromium reports missing system libraries, use
+`npx playwright install --with-deps chromium`.
 
-Persistent state defaults to:
+## Seed without finding a UUID
 
-- macOS: `~/.volc-agent-launchpad/`
-- Linux: `.local/`
+With the POC running, open a second terminal and run:
 
-Set `LOCAL_POC_DATA_ROOT` to use another directory.
+```text
+npm run demo:seed
+```
 
-Each turn mounts only the selected Agent workspace and Codex session directory.
-Default limits are 2 CPUs, 2 GiB memory, 256 processes, dropped capabilities,
-and `no-new-privileges`.
+The command creates a fresh `Demo Builder` Agent, then copies the checked-in
+`demo/intent-verification` fixture into that Agent's workspace. It prints the
+new UUID for auditability, but you do not need to copy it into another command.
+To select and reuse a particular Agent explicitly, the optional form is:
+
+```text
+npm run demo:seed -- --agent <agent-uuid>
+```
+
+The seeder requires the platform-managed workspace and rejects symlinks. It
+overwrites only the fixture's named files and preserves unrelated workspace
+files.
+
+## Development changes
+
+You do not need to repeat the full production setup for every source change.
+Leave the POC running and use watch mode when actively editing:
+
+```text
+npm run poc -- --dev
+```
+
+Watch mode reuses the same state and container images, runs Vite on
+<http://localhost:5173> with API proxying, and watches the server TypeScript.
+Use the plain `npm run poc` when you want the built, production-style screen
+for a rehearsal. The runtime image is reused on later starts; use
+`npm run poc -- --rebuild-runtime` after changing `Dockerfile.runtime` or the
+runtime image inputs.
+
+## Deterministic proof and reset
+
+Run the controlled PASS/FAIL browser proof without spending model budget:
+
+```text
+npm run demo:verify
+```
+
+The default state can be reset safely with:
+
+```text
+npm run demo:reset
+```
+
+This removes only `data/`, `workspaces/`, and `codex-home/` below
+`.local/conductor-live`. It refuses the repository, home directory, filesystem
+root, symlinked paths, and broad or ambiguously named directories. A custom
+dedicated root can be selected in `.env.local` with
+`LOCAL_POC_DATA_ROOT=C:\path\to\conductor-demo` on Windows or an equivalent
+absolute path on macOS/Linux; the same `npm run poc`, `demo:seed`, and
+`demo:reset` commands then use it.
+
+## Common options
+
+Use `.env.local` for local-only overrides:
+
+```text
+CONTAINER_ENGINE=podman
+LOCAL_POC_DATA_ROOT=.local/conductor-live
+POC_PORT=3000
+```
+
+`--skip-verifier-build` skips the verifier image build only when an existing
+verifier image is already available and you intentionally do not want the
+launcher to check it. `VERIFIER_PROVIDER=local-process` is a host-only option
+for deterministic development checks.
+
+## Runtime details
+
+Each Agent turn mounts only the selected Agent workspace and Codex session
+directory. Default limits are 2 CPUs, 2 GiB memory, 256 processes, dropped
+capabilities, and `no-new-privileges`.
 
 Codex requests `workspace-write`. If the Linux kernel lacks Landlock, startup
 warns and disables only the inner Codex sandbox. The outer container limits
 remain active, but this fallback is not tenant isolation.
 
-## Rootless Podman on Linux
-
-This path requires no Docker or Compose. It supports Ubuntu 22.04/24.04, Debian
-12, and veLinux 2.
-
-Install Podman:
-
-```bash
-sudo apt-get update
-sudo apt-get install -y podman uidmap slirp4netns fuse-overlayfs
-```
-
-Install Node.js 22 if needed. Inspect the downloaded setup script before
-running it:
-
-```bash
-curl -fsSL https://deb.nodesource.com/setup_22.x \
-  -o /tmp/nodesource_setup_22.sh
-less /tmp/nodesource_setup_22.sh
-sudo -E bash /tmp/nodesource_setup_22.sh
-sudo apt-get install -y nodejs
-```
-
-Check subordinate UID/GID ranges:
-
-```bash
-grep "^$USER:" /etc/subuid
-grep "^$USER:" /etc/subgid
-```
-
-If both are missing, assign unused ranges and log in again:
-
-```bash
-sudo usermod --add-subuids 100000-165535 "$USER"
-sudo usermod --add-subgids 100000-165535 "$USER"
-```
-
-Verify rootless Podman:
-
-```bash
-podman info
-podman run --rm docker.io/library/alpine:3.20 echo PODMAN_OK
-```
-
-`podman info` must report `rootless: true`. Start the POC:
-
-```bash
-CONTAINER_ENGINE=podman \
-ARK_API_KEY=your-ark-api-key \
-ARK_MODEL=ep-your-endpoint-id \
-npm run poc
-```
-
-This flow was verified on veLinux 2 with rootless Podman 4.3.1. A `vfs` storage
-driver works but needs more disk space; keep at least 5 GiB free for a cold
-build.
-
-## Common options
-
-```bash
-CONTAINER_RUNTIME_APT_PACKAGES='ca-certificates git ripgrep python3 build-essential' \
-ARK_API_KEY=your-ark-api-key \
-ARK_MODEL=ep-your-endpoint-id \
-npm run poc
-```
-
-For restricted networks, configure:
-
-- `CONTAINER_RUNTIME_BASE_IMAGE`
-- `CONTAINER_APT_MIRROR`
-- `CONTAINER_APT_SECURITY_MIRROR`
-
-Resource limits are controlled by `CONTAINER_CPU_LIMIT`,
-`CONTAINER_MEMORY_LIMIT`, and `CONTAINER_PIDS_LIMIT`.
+Mission workspaces live below `<workspace-root>/.missions/<mission-id>` and
+checkpoints are stored separately under `.mission-checkpoints`. A Mission retry
+uses the current Mission workspace; rollback restores a named Conductor
+checkpoint. The source Agent workspace remains unchanged.
 
 ## Troubleshooting
 
-Check Runtime readiness:
+Check Runtime readiness with the engine available on your machine:
 
-```bash
-docker info                       # Or: podman info
+```text
+docker info
 docker image inspect volc-agent-runtime:local
-curl http://localhost:3000/api/system
 ```
 
-If a bind mount is rejected, set `LOCAL_POC_DATA_ROOT` to a directory shared
-with the container VM. On Linux, the startup script automatically uses the host
-UID/GID and validates workspace write access.
-
-Remove only the default Runtime image:
-
-```bash
-podman image rm volc-agent-runtime:local
-```
+Use `podman` in place of `docker` when applicable. If a bind mount is rejected,
+set `LOCAL_POC_DATA_ROOT` in `.env.local` to a directory shared with the
+container VM. The launcher validates workspace write access and reports the
+next safe action without exposing model credentials.

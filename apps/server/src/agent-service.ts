@@ -1,61 +1,51 @@
-import { randomUUID } from "node:crypto";
-import type { AppConfig } from "./config.js";
-import { isArkConfigured } from "./config.js";
-import { HttpError, RunCancelledError } from "./errors.js";
-import { JsonStore } from "./store.js";
+import { randomUUID } from 'node:crypto';
+import type { AppConfig } from './config.js';
+import { isModelConfigured } from './config.js';
+import { HttpError } from './errors.js';
+import { safeMissionText } from './mission-evidence.js';
+import { JsonStore } from './store.js';
 import type {
   Agent,
   AgentRun,
-  AgentRunner,
   CreateAgentInput,
   Message,
   UpdateAgentInput,
-} from "./types.js";
-import { WorkspaceManager } from "./workspace.js";
+} from './types.js';
+import { WorkspaceManager } from './workspace.js';
+import { findReservingMission } from './mission-state.js';
+import type { RunExecutionPort } from './run-execution.js';
+import type { PlaygroundImpactService } from './playground-impact-service.js';
 
 const now = () => new Date().toISOString();
 
 export class AgentService {
-  private readonly activeExecutions = new Map<string, Promise<void>>();
-  private readonly cancellationRequests = new Set<string>();
-
   constructor(
     private readonly config: AppConfig,
     private readonly store: JsonStore,
     private readonly workspaces: WorkspaceManager,
-    private readonly runner: AgentRunner,
+    private readonly execution: RunExecutionPort,
+    private readonly impact?: PlaygroundImpactService,
   ) {}
 
   async initialize(): Promise<void> {
     await this.store.initialize();
     await this.workspaces.initialize();
-    await this.store.mutate((database) => {
-      for (const run of database.runs) {
-        if (run.status === "queued" || run.status === "running") {
-          run.status = "cancelled";
-          run.error = "Server restarted while this run was active";
-          run.completedAt = now();
-        }
-      }
-      for (const agent of database.agents) {
-        if (agent.status === "busy") {
-          agent.status = "ready";
-          agent.updatedAt = now();
-        }
-      }
-    });
+    await this.execution.reconcileStartup();
+    await this.impact?.reconcileStartup();
   }
 
   listAgents(): Agent[] {
     return this.store
       .snapshot()
-      .agents.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+      .agents.sort((left, right) =>
+        right.updatedAt.localeCompare(left.updatedAt),
+      );
   }
 
   getAgent(id: string): Agent {
     const agent = this.store.snapshot().agents.find((item) => item.id === id);
     if (!agent) {
-      throw new HttpError(404, "Agent not found");
+      throw new HttpError(404, 'Agent not found');
     }
     return agent;
   }
@@ -66,9 +56,9 @@ export class AgentService {
     const agent: Agent = {
       id,
       name: input.name.trim(),
-      description: input.description?.trim() ?? "",
-      instructions: input.instructions?.trim() ?? "",
-      status: "ready",
+      description: input.description?.trim() ?? '',
+      instructions: input.instructions?.trim() ?? '',
+      status: 'ready',
       workspacePath: this.workspaces.workspacePath(id),
       codexThreadId: null,
       lastError: null,
@@ -82,20 +72,31 @@ export class AgentService {
 
   async updateAgent(id: string, input: UpdateAgentInput): Promise<Agent> {
     const current = this.getAgent(id);
-    if (current.status === "busy") {
-      throw new HttpError(409, "Stop the active run before editing this Agent");
+    if (current.status === 'busy') {
+      throw new HttpError(409, 'Stop the active run before editing this Agent');
     }
     const updated = await this.store.mutate((database) => {
+      const reserving = findReservingMission(database.missions, id);
+      if (reserving)
+        throw new HttpError(
+          409,
+          'Agent is reserved by Mission ' + reserving.id,
+        );
       const agent = database.agents.find((item) => item.id === id);
       if (!agent) {
-        throw new HttpError(404, "Agent not found");
+        throw new HttpError(404, 'Agent not found');
       }
-      if (agent.status === "busy") {
-        throw new HttpError(409, "Stop the active run before editing this Agent");
+      if (agent.status === 'busy') {
+        throw new HttpError(
+          409,
+          'Stop the active run before editing this Agent',
+        );
       }
       if (input.name !== undefined) agent.name = input.name.trim();
-      if (input.description !== undefined) agent.description = input.description.trim();
-      if (input.instructions !== undefined) agent.instructions = input.instructions.trim();
+      if (input.description !== undefined)
+        agent.description = input.description.trim();
+      if (input.instructions !== undefined)
+        agent.instructions = input.instructions.trim();
       agent.lastError = null;
       agent.updatedAt = now();
       return structuredClone(agent);
@@ -105,25 +106,81 @@ export class AgentService {
   }
 
   async deleteAgent(id: string): Promise<{ archivedWorkspace: string }> {
-    const agent = this.getAgent(id);
-    await this.cancelExecution(id);
-    const archivedWorkspace = await this.workspaces.archive(agent);
-    await this.store.mutate((database) => {
+    const admission = await this.store.mutate((database) => {
+      const agent = database.agents.find((item) => item.id === id);
+      if (!agent) throw new HttpError(404, 'Agent not found');
+      const unresolvedImpact = database.playgroundImpactAdmissions.find(
+        (item) =>
+          item.agentId === id &&
+          ['planning', 'confirmation_required', 'staging', 'publishing', 'promoting'].includes(
+            item.status,
+          ),
+      );
+      if (unresolvedImpact)
+        throw new HttpError(
+          409,
+          'Resolve the pending Playground impact admission before deleting this Agent',
+        );
+      const reserving = findReservingMission(database.missions, id);
+      if (reserving)
+        throw new HttpError(
+          409,
+          'Agent is reserved by Mission ' + reserving.id,
+        );
+      const wasBusy = agent.status === 'busy';
+      if (wasBusy) {
+        agent.status = 'stopped';
+        agent.updatedAt = now();
+      }
+      return { agent: structuredClone(agent), wasBusy };
+    });
+    if (admission.wasBusy) await this.execution.cancel(id);
+    const agent = admission.agent;
+    let archivedWorkspace = '';
+    await this.store.mutate(async (database) => {
+      const reserving = findReservingMission(database.missions, id);
+      if (reserving)
+        throw new HttpError(
+          409,
+          'Agent is reserved by Mission ' + reserving.id,
+        );
+      archivedWorkspace = await this.workspaces.archive(agent);
       database.agents = database.agents.filter((item) => item.id !== id);
-      database.messages = database.messages.filter((item) => item.agentId !== id);
-      database.runs = database.runs.filter((item) => item.agentId !== id);
+      database.messages = database.messages.filter(
+        (item) => item.agentId !== id,
+      );
+      database.runs = database.runs.filter(
+        (item) =>
+          item.agentId !== id ||
+          item.context.kind === 'mission' ||
+          item.context.kind === 'playground_impact' ||
+          item.context.kind === 'playground_candidate',
+      );
     });
     return { archivedWorkspace };
   }
 
   async startAgent(id: string): Promise<Agent> {
-    return this.setStatus(id, "ready");
+    return this.setStatus(id, 'ready');
   }
 
   async stopAgent(id: string): Promise<Agent> {
-    this.getAgent(id);
-    await this.cancelExecution(id);
-    return this.setStatus(id, "stopped");
+    const result = await this.store.mutate((database) => {
+      const agent = database.agents.find((item) => item.id === id);
+      if (!agent) throw new HttpError(404, 'Agent not found');
+      const reserving = findReservingMission(database.missions, id);
+      if (reserving)
+        throw new HttpError(
+          409,
+          'Agent is reserved by Mission ' + reserving.id,
+        );
+      const wasBusy = agent.status === 'busy';
+      agent.status = 'stopped';
+      agent.updatedAt = now();
+      return { agent: structuredClone(agent), wasBusy };
+    });
+    if (result.wasBusy) await this.execution.cancel(id);
+    return result.agent;
   }
 
   getMessages(agentId: string): Message[] {
@@ -137,7 +194,7 @@ export class AgentService {
   getRun(runId: string): AgentRun {
     const run = this.store.snapshot().runs.find((item) => item.id === runId);
     if (!run) {
-      throw new HttpError(404, "Run not found");
+      throw new HttpError(404, 'Run not found');
     }
     return run;
   }
@@ -146,7 +203,9 @@ export class AgentService {
     this.getAgent(agentId);
     return this.store
       .snapshot()
-      .runs.filter((run) => run.agentId === agentId)
+      .runs.filter(
+        (run) => run.agentId === agentId && run.context.kind === 'playground',
+      )
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   }
 
@@ -154,22 +213,24 @@ export class AgentService {
     agentId: string,
     prompt: string,
   ): Promise<{ run: AgentRun; message: Message }> {
-    if (!isArkConfigured(this.config)) {
+    if (!isModelConfigured(this.config)) {
       throw new HttpError(
         503,
-        "Ark is not configured. Set ARK_API_KEY and ARK_MODEL, then restart.",
+        'Model provider is not configured. Set MODEL_API_KEY and MODEL_NAME, then restart.',
       );
     }
     const timestamp = now();
     const runId = randomUUID();
+    const safePrompt = safeMissionText(prompt).content;
     const run: AgentRun = {
       id: runId,
       agentId,
-      status: "queued",
-      prompt,
+      status: 'queued',
+      prompt: safePrompt,
       output: null,
       error: null,
       usage: null,
+      context: { kind: 'playground' },
       startedAt: null,
       completedAt: null,
       createdAt: timestamp,
@@ -178,149 +239,117 @@ export class AgentService {
       id: randomUUID(),
       agentId,
       runId,
-      role: "user",
-      content: prompt,
+      role: 'user',
+      content: safePrompt,
       createdAt: timestamp,
     };
     const agentAtStart = await this.store.mutate((database) => {
       const storedAgent = database.agents.find((item) => item.id === agentId);
       if (!storedAgent) {
-        throw new HttpError(404, "Agent not found");
+        throw new HttpError(404, 'Agent not found');
       }
-      if (storedAgent.status === "stopped") {
-        throw new HttpError(409, "Start the Agent before sending a message");
+      if (storedAgent.status === 'stopped') {
+        throw new HttpError(409, 'Start the Agent before sending a message');
       }
-      if (storedAgent.status === "busy") {
-        throw new HttpError(409, "This Agent is already running");
+      if (storedAgent.status === 'busy') {
+        throw new HttpError(409, 'This Agent is already running');
       }
+      const reserving = findReservingMission(database.missions, agentId);
+      if (reserving)
+        throw new HttpError(
+          409,
+          'Agent is reserved by Mission ' + reserving.id,
+        );
       database.runs.push(run);
       database.messages.push(message);
       const snapshot = structuredClone(storedAgent);
-      storedAgent.status = "busy";
+      storedAgent.status = 'busy';
       storedAgent.lastError = null;
       storedAgent.updatedAt = timestamp;
       return snapshot;
     });
-    const execution = this.executeRun(agentAtStart, run);
-    this.activeExecutions.set(agentId, execution);
-    void execution
-      .finally(() => {
-        if (this.activeExecutions.get(agentId) === execution) {
-          this.activeExecutions.delete(agentId);
-        }
-      })
-      .catch(() => undefined);
+    void this.execution.start(agentAtStart, run, {
+      agentId: agentAtStart.id,
+      workspacePath: agentAtStart.workspacePath,
+      prompt,
+      threadId: agentAtStart.codexThreadId,
+    }).catch(() => undefined);
     return { run, message };
+  }
+
+  async sendGovernedMessage(agentId: string, prompt: string, requestId?: string) {
+    if (!this.impact) return this.sendMessage(agentId, prompt);
+    if (!isModelConfigured(this.config)) throw new HttpError(503, 'Model provider is not configured. Set MODEL_API_KEY and MODEL_NAME, then restart.');
+    return this.impact.submit(agentId, prompt, requestId);
+  }
+
+  listImpactAdmissions(agentId: string) { return this.impact?.list(agentId) ?? []; }
+  async confirmImpactAdmission(agentId: string, admissionId: string, choice: 'governed' | 'nonvisual') {
+    if (!this.impact) throw new HttpError(503, 'Playground impact governance is unavailable');
+    return this.impact.confirm(agentId, admissionId, choice);
   }
 
   async systemInfo(): Promise<Record<string, unknown>> {
     return {
-      arkConfigured: isArkConfigured(this.config),
-      arkBaseUrl: this.config.arkBaseUrl,
-      arkModel: this.config.arkModel || null,
-      codexAvailable: await this.runner.isAvailable(),
+      arkConfigured: isModelConfigured(this.config),
+      arkBaseUrl: this.config.modelBaseUrl,
+      arkModel: this.config.modelName || null,
+      codexAvailable: await this.execution.isAvailable(),
       codexSandboxMode: this.config.codexSandboxMode,
       runtimeProvider: this.config.runtimeProvider,
       containerEngine:
-        this.config.runtimeProvider === "container"
+        this.config.runtimeProvider === 'container'
           ? this.config.containerEngine
           : null,
       runtime:
-        this.config.runtimeProvider === "container"
-          ? "Codex CLI in " + this.config.containerEngine + " Runtime"
-          : "Codex CLI in application container",
+        this.config.runtimeProvider === 'container'
+          ? 'Codex CLI in ' + this.config.containerEngine + ' Runtime'
+          : 'Codex CLI in application container',
     };
   }
 
-  private async executeRun(agentAtStart: Agent, run: AgentRun): Promise<void> {
-    await this.store.mutate((database) => {
-      const storedRun = database.runs.find((item) => item.id === run.id);
-      if (storedRun) {
-        storedRun.status = "running";
-        storedRun.startedAt = now();
-      }
-    });
-    try {
-      if (this.cancellationRequests.has(agentAtStart.id)) {
-        throw new RunCancelledError();
-      }
-      const result = await this.runner.run({
-        agentId: agentAtStart.id,
-        workspacePath: agentAtStart.workspacePath,
-        prompt: run.prompt,
-        threadId: agentAtStart.codexThreadId,
-      });
-      const completedAt = now();
-      await this.store.mutate((database) => {
-        const storedRun = database.runs.find((item) => item.id === run.id);
-        const agent = database.agents.find((item) => item.id === agentAtStart.id);
-        if (!storedRun || !agent) return;
-        storedRun.status = "completed";
-        storedRun.output = result.output;
-        storedRun.usage = result.usage;
-        storedRun.completedAt = completedAt;
-        database.messages.push({
-          id: randomUUID(),
-          agentId: agent.id,
-          runId: run.id,
-          role: "assistant",
-          content: result.output,
-          createdAt: completedAt,
-        });
-        agent.status = "ready";
-        agent.codexThreadId = result.threadId;
-        agent.lastError = null;
-        agent.updatedAt = completedAt;
-      });
-    } catch (error) {
-      const completedAt = now();
-      const cancelled = error instanceof RunCancelledError;
-      const message = error instanceof Error ? error.message : String(error);
-      await this.store.mutate((database) => {
-        const storedRun = database.runs.find((item) => item.id === run.id);
-        const agent = database.agents.find((item) => item.id === agentAtStart.id);
-        if (storedRun) {
-          storedRun.status = cancelled ? "cancelled" : "failed";
-          storedRun.error = message;
-          storedRun.completedAt = completedAt;
-        }
-        if (agent) {
-          if (agent.status !== "stopped") {
-            agent.status = cancelled ? "ready" : "error";
-          }
-          agent.lastError = cancelled ? null : message;
-          agent.updatedAt = completedAt;
-        }
-      });
-    }
-  }
-
-  private async setStatus(id: string, status: Agent["status"]): Promise<Agent> {
+  private async setStatus(id: string, status: Agent['status']): Promise<Agent> {
     return this.store.mutate((database) => {
       const agent = database.agents.find((item) => item.id === id);
       if (!agent) {
-        throw new HttpError(404, "Agent not found");
+        throw new HttpError(404, 'Agent not found');
       }
-      if (status === "ready" && agent.status === "busy") {
-        throw new HttpError(409, "Stop the active run before starting this Agent");
+      const reserving = findReservingMission(database.missions, id);
+      if (reserving)
+        throw new HttpError(
+          409,
+          'Agent is reserved by Mission ' + reserving.id,
+        );
+      if (status === 'ready' && agent.status === 'busy') {
+        throw new HttpError(
+          409,
+          'Stop the active run before starting this Agent',
+        );
+      }
+      if (
+        status === 'ready' &&
+        database.playgroundImpactAdmissions.some(
+          (item) =>
+            item.agentId === id &&
+            [
+              'planning',
+              'confirmation_required',
+              'staging',
+              'publishing',
+              'promoting',
+            ].includes(item.status),
+        )
+      ) {
+        throw new HttpError(
+          409,
+          'Resolve the pending Playground impact admission before starting this Agent',
+        );
       }
       agent.status = status;
-      if (status === "ready") agent.lastError = null;
+      if (status === 'ready') agent.lastError = null;
       agent.updatedAt = now();
       return structuredClone(agent);
     });
   }
 
-  private async cancelExecution(agentId: string): Promise<void> {
-    this.cancellationRequests.add(agentId);
-    try {
-      await this.runner.cancel(agentId);
-      const execution = this.activeExecutions.get(agentId);
-      if (execution) {
-        await execution;
-      }
-    } finally {
-      this.cancellationRequests.delete(agentId);
-    }
-  }
 }

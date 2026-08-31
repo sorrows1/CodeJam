@@ -10,7 +10,7 @@ if [[ -z "${VOLCENGINE_ACCESS_KEY:-}" || -z "${VOLCENGINE_SECRET_KEY:-}" ]]; the
 fi
 
 if [[ ! -f .env.production ]]; then
-  echo "Missing .env.production. Copy .env.example and fill the Ark values." >&2
+  echo "Missing .env.production. Copy .env.example and fill the model values." >&2
   exit 1
 fi
 
@@ -24,15 +24,15 @@ set -a
 source .env.production
 set +a
 
-if [[ "${ARK_API_KEY:-}" == "" || "${ARK_MODEL:-}" == "" || "${APP_AUTH_TOKEN:-}" == "" ]]; then
-  echo "ARK_API_KEY, ARK_MODEL and APP_AUTH_TOKEN are required in .env.production." >&2
+if [[ "${MODEL_API_KEY:-}" == "" || "${MODEL_NAME:-}" == "" || "${MODEL_BASE_URL:-}" == "" || "${APP_AUTH_TOKEN:-}" == "" ]]; then
+  echo "MODEL_API_KEY, MODEL_NAME, MODEL_BASE_URL and APP_AUTH_TOKEN are required in .env.production." >&2
   exit 1
 fi
 
-export TF_VAR_ark_api_key="$ARK_API_KEY"
+export TF_VAR_model_api_key="$MODEL_API_KEY"
 export TF_VAR_app_auth_token="$APP_AUTH_TOKEN"
-export TF_VAR_ark_model="$ARK_MODEL"
-export TF_VAR_ark_base_url="${ARK_BASE_URL:-https://ark.cn-beijing.volces.com/api/v3}"
+export TF_VAR_model_name="$MODEL_NAME"
+export TF_VAR_model_base_url="$MODEL_BASE_URL"
 
 terraform -chdir=deploy/volcengine init
 terraform -chdir=deploy/volcengine apply

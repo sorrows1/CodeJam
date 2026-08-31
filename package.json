@@ -2,7 +2,7 @@
   "name": "volc-agent-launchpad",
   "version": "1.0.0",
   "private": true,
-  "description": "A middleware-free Agent platform starter kit running Codex CLI locally or on Volcengine ECS.",
+  "description": "Conductor intent-governance middleware that makes approved product intent enforceable for autonomous coding Agents.",
   "type": "module",
   "workspaces": [
     "apps/*"
@@ -16,7 +16,14 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test -w @launchpad/server",
     "check": "npm run typecheck && npm run test && npm run build",
-    "poc": "./scripts/start-local-poc.sh",
+    "demo:seed": "node scripts/prepare-conductor-demo.mjs",
+    "demo:reset": "node scripts/reset-conductor-demo.mjs",
+    "demo:setup": "npx playwright install chromium",
+    "demo:build-verifier": "node scripts/build-conductor-verifier.mjs",
+    "demo:doctor": "node scripts/demo-doctor.mjs",
+    "demo:verify": "npm run test -w @launchpad/server -- --run src/mission-verification.test.ts src/verification-visual-integration.test.ts",
+    "poc": "node scripts/start-local-poc.mjs",
+    "poc:dev": "node scripts/start-local-poc.mjs --dev",
     "start": "npm run start -w @launchpad/server"
   },
   "devDependencies": {

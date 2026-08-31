@@ -1,11 +1,13 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
 import type { AppConfig } from "./config.js";
-import { buildCodexArgs, parseCodexEventLine } from "./codex-runner.js";
-import { RunCancelledError } from "./errors.js";
+import { buildCodexArgs } from "./codex-runner.js";
+import { codexProtocolResult, consumeCodexProtocolLine, createCodexProtocolState } from "./codex-protocol.js";
+import { RunCancelledError, RunnerExecutionError } from "./errors.js";
 import type {
   AgentRunner,
-  RunUsage,
+  RunnerPreflightRequest,
+  RunnerReadinessResult,
   RunnerRequest,
   RunnerResult,
 } from "./types.js";
@@ -20,13 +22,6 @@ interface ActiveContainer {
   outputExceeded: boolean;
   settled: Promise<void>;
   termination: Promise<void> | null;
-}
-
-interface ParsedEvents {
-  messages: string[];
-  threadId: string | null;
-  usage: RunUsage | null;
-  errors: string[];
 }
 
 export function containerName(agentId: string, instanceId = "default"): string {
@@ -69,7 +64,7 @@ export function buildContainerRunArgs(
     "--user",
     config.containerUser,
     "--env",
-    "ARK_API_KEY",
+    "MODEL_API_KEY",
     "--env",
     "CODEX_HOME=/codex-home",
     "--env",
@@ -77,7 +72,7 @@ export function buildContainerRunArgs(
     "--env",
     "NO_COLOR=1",
     "--mount",
-    "type=bind,src=" + request.workspacePath + ",dst=/workspace",
+    "type=bind,src=" + request.workspacePath + ",dst=/workspace" + (request.accessMode === "read_only" ? ",readonly" : ""),
     "--mount",
     "type=bind,src=" + config.codexHome + ",dst=/codex-home",
     "--workdir",
@@ -85,6 +80,32 @@ export function buildContainerRunArgs(
     config.containerRuntimeImage,
     "codex",
     ...buildCodexArgs(request, config.codexSandboxMode, "/workspace"),
+  ];
+}
+
+export function buildContainerPreflightArgs(workspacePath: string, config: AppConfig): string[] {
+  const engineName = config.containerEngine.split(/[\\/]/).at(-1)?.toLowerCase();
+  return [
+    'run', '--rm', '--init',
+    '--label', 'io.codejam.launchpad=runtime-preflight',
+    '--label', 'io.codejam.instance-id=' + config.runtimeInstanceId,
+    ...(engineName === 'podman' ? ['--userns', 'keep-id'] : []),
+    '--network', 'none',
+    '--security-opt', 'no-new-privileges',
+    '--cap-drop', 'ALL',
+    '--cpus', String(config.containerCpuLimit),
+    '--memory', config.containerMemoryLimit,
+    '--pids-limit', String(config.containerPidsLimit),
+    '--user', config.containerUser,
+    '--env', 'CODEX_HOME=/codex-home',
+    '--env', 'HOME=/tmp',
+    '--env', 'NO_COLOR=1',
+    '--mount', 'type=bind,src=' + workspacePath + ',dst=/workspace',
+    '--mount', 'type=bind,src=' + config.codexHome + ',dst=/codex-home',
+    '--workdir', '/workspace',
+    config.containerRuntimeImage,
+    'sh', '-c',
+    'test -d /workspace && test -r /workspace/AGENTS.md && test -w /workspace && test -d /codex-home && test -r /codex-home/config.toml && command -v codex >/dev/null && codex --version',
   ];
 }
 
@@ -107,6 +128,21 @@ export class ContainerCodexRunner implements AgentRunner {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  async preflight(request: RunnerPreflightRequest): Promise<RunnerReadinessResult> {
+    try {
+      await execFileAsync(this.config.containerEngine, buildContainerPreflightArgs(request.workspacePath, this.config), {
+        timeout: 15_000,
+        env: this.childEnvironment(),
+        maxBuffer: 16 * 1024,
+      });
+      return { ok: true };
+    } catch (error) {
+      const candidate = error as NodeJS.ErrnoException & { stderr?: string };
+      if (candidate.code === 'ENOENT') return { ok: false, category: 'runtime_unavailable', message: 'Container Runtime executable is unavailable' };
+      return { ok: false, category: 'runtime_config_unavailable', message: 'Mission Runtime preflight could not access the workspace, Codex configuration, or executable' };
     }
   }
 
@@ -166,12 +202,7 @@ export class ContainerCodexRunner implements AgentRunner {
     };
     this.active.set(request.agentId, active);
 
-    const parsed: ParsedEvents = {
-      messages: [],
-      threadId: request.threadId,
-      usage: null,
-      errors: [],
-    };
+    const parsed = createCodexProtocolState(request.threadId);
     let stdout = "";
     let stderr = "";
     let totalBytes = 0;
@@ -187,7 +218,10 @@ export class ContainerCodexRunner implements AgentRunner {
         stdout += chunk.toString("utf8");
         const lines = stdout.split(/\r?\n/);
         stdout = lines.pop() ?? "";
-        for (const line of lines) parseCodexEventLine(line, parsed);
+        for (const line of lines) {
+          const observation = consumeCodexProtocolLine(line, parsed);
+          if (observation) request.onObservation?.(observation);
+        }
       } else {
         stderr += chunk.toString("utf8");
         if (stderr.length > 16_384) stderr = stderr.slice(-16_384);
@@ -208,27 +242,31 @@ export class ContainerCodexRunner implements AgentRunner {
         child.once("error", reject);
         child.once("close", (code) => resolve(code ?? 1));
       });
-      if (stdout.trim()) parseCodexEventLine(stdout.trim(), parsed);
+      if (stdout.trim()) {
+        const observation = consumeCodexProtocolLine(stdout.trim(), parsed);
+        if (observation) request.onObservation?.(observation);
+      }
       if (active.cancelled) throw new RunCancelledError();
       if (active.timedOut) {
-        throw new Error("Runtime timed out after " + this.config.codexTimeoutMs + " ms");
+        throw new RunnerExecutionError("Runtime timed out after " + this.config.codexTimeoutMs + " ms", codexProtocolResult(parsed).usage);
       }
       if (active.outputExceeded) {
-        throw new Error("Codex output exceeded CODEX_MAX_OUTPUT_BYTES");
+        throw new RunnerExecutionError("Codex output exceeded CODEX_MAX_OUTPUT_BYTES", codexProtocolResult(parsed).usage);
       }
       if (exitCode !== 0) {
         const detail = parsed.errors.at(-1) ?? stderr.trim() ?? "No error detail";
-        throw new Error(
+        throw new RunnerExecutionError(
           this.config.containerEngine +
             " Runtime exited with code " +
             exitCode +
             ": " +
-            detail,
+            detail, codexProtocolResult(parsed).usage,
         );
       }
-      const output = parsed.messages.at(-1)?.trim();
-      if (!output) throw new Error("Codex completed without an agent message");
-      return { output, threadId: parsed.threadId, usage: parsed.usage };
+      const result = codexProtocolResult(parsed);
+      if (parsed.errors.length) throw new RunnerExecutionError(parsed.errors.at(-1)!, result.usage);
+      if (parsed.recognizableEventCount === 0) throw new RunnerExecutionError("Codex completed without recognizable protocol activity", result.usage);
+      return result;
     } finally {
       clearTimeout(timeout);
       this.active.delete(request.agentId);
@@ -237,7 +275,7 @@ export class ContainerCodexRunner implements AgentRunner {
 
   private childEnvironment(): NodeJS.ProcessEnv {
     const environment: NodeJS.ProcessEnv = {
-      ARK_API_KEY: this.config.arkApiKey,
+      MODEL_API_KEY: this.config.modelApiKey,
       NO_COLOR: "1",
     };
     for (const name of [

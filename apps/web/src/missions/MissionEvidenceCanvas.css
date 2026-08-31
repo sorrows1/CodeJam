@@ -1,0 +1,229 @@
+.mission-evidence-canvas {
+  padding: 22px;
+  border: 1px solid #d8d5cc;
+  border-radius: 16px;
+  background: #fff;
+  color: inherit;
+  box-shadow: 0 14px 38px rgba(39, 38, 33, .08);
+}
+
+.mission-evidence-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+.mission-evidence-header > div:first-child { display: grid; gap: 3px; }
+.mission-evidence-header span { color: var(--muted); font-size: 10px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
+.mission-evidence-header h2 { margin: 0; font-size: 22px; line-height: 1.2; }
+.mission-evidence-header p { max-width: 720px; margin: 3px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.mission-evidence-header__actions { display: flex; gap: 8px; align-items: flex-start; }
+
+.mission-evidence-canvas button,
+.mission-evidence-canvas select,
+.mission-evidence-full button {
+  min-height: 34px;
+  border: 1px solid #d8d5cc;
+  border-radius: 8px;
+  background: #fbfaf7;
+  color: inherit;
+  padding: 7px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+.mission-evidence-canvas button:hover,
+.mission-evidence-full button:hover { background: #f2f0e9; }
+.mission-evidence-canvas button:disabled { opacity: .5; cursor: not-allowed; }
+
+.mission-evidence-history { position: relative; }
+.mission-evidence-history > summary {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  border: 1px solid #d8d5cc;
+  border-radius: 8px;
+  background: #fbfaf7;
+  padding: 7px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  list-style: none;
+  white-space: nowrap;
+}
+.mission-evidence-history > summary::-webkit-details-marker { display: none; }
+.mission-evidence-history[open] > summary { background: #f2f0e9; }
+.mission-evidence-history__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 5;
+  width: min(320px, 72vw);
+  max-height: 360px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid #d8d5cc;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(39, 38, 33, .14);
+}
+.mission-evidence-history__menu section + section { margin-top: 8px; padding-top: 8px; border-top: 1px solid #ece8df; }
+.mission-evidence-history__menu section > header { display: flex; justify-content: space-between; gap: 12px; padding: 3px 4px 6px; }
+.mission-evidence-history__menu section > header strong { font-size: 11px; }
+.mission-evidence-history__menu section > header small { color: var(--muted); font-size: 10px; }
+.mission-evidence-history__menu button { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 4px; text-align: left; }
+.mission-evidence-history__menu button span { color: inherit; font-size: 10px; font-weight: 650; letter-spacing: 0; text-transform: none; }
+.mission-evidence-history__menu button small { color: var(--muted); font-size: 10px; }
+.mission-evidence-history__menu button.is-active { border-color: #a9a0dd; background: #f2efff; }
+
+.mission-evidence-switcher {
+  display: inline-flex;
+  gap: 4px;
+  margin: 18px 0 12px;
+  padding: 4px;
+  border-radius: 10px;
+  background: #f0eee8;
+}
+.mission-evidence-switcher button { min-height: 30px; border: 0; background: transparent; font-size: 11px; }
+.mission-evidence-switcher button.is-active { background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+
+.mission-evidence-stage {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.mission-evidence-stage.is-approved,
+.mission-evidence-stage.is-built { grid-template-columns: minmax(0, 1fr); }
+
+.mission-evidence-surface {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #ddd9d0;
+  border-radius: 12px;
+  background: #f6f4ee;
+}
+.mission-evidence-surface > header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 12px;
+  border-bottom: 1px solid #e4e0d7;
+  background: #fbfaf7;
+}
+.mission-evidence-surface > header > div { display: grid; gap: 2px; }
+.mission-evidence-surface > header span { color: var(--muted); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.mission-evidence-surface > header strong { font-size: 13px; }
+.mission-evidence-surface > header small { color: var(--muted); font-size: 9px; }
+
+.mission-evidence-frame {
+  display: grid;
+  min-height: 340px;
+  place-items: center;
+  overflow: hidden;
+  background: #e9e7e0;
+}
+.mission-evidence-frame.is-design { padding: 0; }
+.mission-evidence-frame img { display: block; width: 100%; height: auto; max-height: 680px; object-fit: contain; object-position: top center; background: #fff; }
+.mission-evidence-frame p { margin: 0; padding: 20px; color: var(--muted); font-size: 12px; }
+.mission-evidence-legacy-note {
+  margin: 0;
+  padding: 9px 12px;
+  border-top: 1px solid #e4e0d7;
+  background: #fbfaf7;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.mission-preview-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid #ddd9d0;
+  border-radius: 10px;
+  background: #f9f8f4;
+}
+.mission-preview-row p { margin: 0; color: var(--muted); font-size: 11px; }
+.mission-preview-row button { white-space: nowrap; }
+
+.mission-live-preview {
+  margin: 0 0 14px;
+  overflow: hidden;
+  border: 1px solid #cfc8ee;
+  border-radius: 12px;
+  background: #f7f4ff;
+}
+.mission-live-preview > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; }
+.mission-live-preview > header > div { display: grid; gap: 2px; }
+.mission-live-preview > header span { color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .05em; }
+.mission-live-preview > header strong { font-size: 13px; }
+.mission-live-preview__viewport {
+  position: relative;
+  width: 100%;
+  min-height: 1px;
+  overflow: hidden;
+  border-top: 1px solid #ded8f3;
+  border-bottom: 1px solid #ded8f3;
+  background: #fff;
+}
+.mission-live-preview__canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: top left;
+}
+.mission-live-preview__canvas iframe { display: block; border: 0; background: #fff; }
+.mission-live-preview > small { display: block; padding: 8px 12px; color: var(--muted); font-size: 9px; }
+
+.mission-preview-error {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid #edc6c3;
+  border-radius: 10px;
+  background: #fff5f4;
+  color: #873d39;
+  font-size: 11px;
+}
+
+.mission-evidence-details { margin-top: 14px; border-top: 1px solid #e8e5dd; }
+.mission-evidence-details summary { padding: 12px 0 2px; color: var(--muted); font-size: 11px; font-weight: 700; cursor: pointer; }
+.mission-evidence-detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; margin: 12px 0; }
+.mission-evidence-detail-grid section { display: grid; gap: 2px; padding: 10px; border-radius: 9px; background: #f7f6f2; }
+.mission-evidence-detail-grid span { color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .04em; }
+.mission-evidence-detail-grid strong { font-size: 11px; overflow-wrap: anywhere; }
+.mission-evidence-detail-grid small { color: var(--muted); font-size: 9px; overflow-wrap: anywhere; }
+.mission-evidence-details pre { max-height: 260px; overflow: auto; padding: 12px; border-radius: 9px; background: #f4f3ef; font-size: 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mission-evidence-details > p { display: grid; gap: 2px; padding: 8px 0; margin: 0; border-top: 1px solid #eeebe4; }
+.mission-evidence-details > p strong { font-size: 11px; }
+.mission-evidence-details > p span { color: var(--muted); font-size: 10px; line-height: 1.4; }
+.mission-evidence-details > p.is-pass strong { color: #238451; }
+.mission-evidence-details > p.is-fail strong { color: #c5373d; }
+
+.mission-evidence-full {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  overflow: auto;
+  padding: 18px;
+  background: rgba(24, 24, 21, .88);
+}
+.mission-evidence-full__bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: min(1560px, 98vw);
+  margin: 0 auto 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #fbfaf7;
+}
+.mission-evidence-full > .mission-evidence-canvas { width: min(1560px, 98vw); margin: 0 auto; }

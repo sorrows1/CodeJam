@@ -6,7 +6,10 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": "http://127.0.0.1:3000",
+      // The opaque preview CSP is scoped to the browser-facing authenticated
+      // content path. Preserve that host instead of rewriting it to the API
+      // target, or sandboxed CSS/JS URLs will not match their exact CSP source.
+      "/api": { target: "http://127.0.0.1:3000", changeOrigin: false },
     },
   },
 });

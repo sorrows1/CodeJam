@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import path from "node:path";
 import { loadConfig } from "./config.js";
 import {
+  buildContainerPreflightArgs,
   buildContainerRunArgs,
   containerName,
 } from "./container-codex-runner.js";
@@ -9,8 +11,8 @@ describe("Container Codex runner", () => {
   it("builds an isolated Docker/Podman-compatible invocation", () => {
     const config = loadConfig({
       NODE_ENV: "test",
-      ARK_API_KEY: "secret-that-must-not-appear-in-argv",
-      ARK_MODEL: "ep-test",
+      MODEL_API_KEY: "secret-that-must-not-appear-in-argv",
+      MODEL_NAME: "ep-test",
       CODEX_HOME: "/tmp/codex-home",
       RUNTIME_PROVIDER: "container",
       CONTAINER_ENGINE: "podman",
@@ -33,12 +35,16 @@ describe("Container Codex runner", () => {
     );
     expect(args).toContain("runtime:test");
     expect(args).toContain("type=bind,src=/tmp/agent-workspace,dst=/workspace");
-    expect(args).toContain("type=bind,src=/tmp/codex-home,dst=/codex-home");
+    expect(args).toContain(
+      "type=bind,src=" + path.resolve("/tmp/codex-home") + ",dst=/codex-home",
+    );
     expect(args).toContain("501:20");
     expect(args).toContain("workspace-write");
     expect(args).toContain("/workspace");
     expect(args).toContain("io.codejam.instance-id=test-instance");
     expect(args).toContain("keep-id");
+    expect(args).toContain("MODEL_API_KEY");
+    expect(args).not.toContain("ARK_API_KEY");
     expect(args).not.toContain("secret-that-must-not-appear-in-argv");
   });
 
@@ -59,5 +65,21 @@ describe("Container Codex runner", () => {
     );
     expect(args.slice(-3)).toEqual(["resume", "thread-123", "continue"]);
     expect(args).not.toContain("keep-id");
+  });
+
+  it("binds proposal workspaces read-only and forces the Codex read-only sandbox", () => {
+    const config = loadConfig({ NODE_ENV: "test", CODEX_HOME: "/tmp/codex-home", RUNTIME_PROVIDER: "container" });
+    const args = buildContainerRunArgs({ agentId: "agent", workspacePath: "/tmp/workspace", prompt: "inspect only", threadId: null, accessMode: "read_only" }, config);
+    expect(args).toContain("type=bind,src=/tmp/workspace,dst=/workspace,readonly");
+    expect(args[args.indexOf("--sandbox") + 1]).toBe("read-only");
+  });
+
+  it('builds a no-model preflight with the exact mounts and no provider secret', () => {
+    const config = loadConfig({ NODE_ENV: 'test', MODEL_API_KEY: 'secret-value', CODEX_HOME: 'C:\\Codex Home', RUNTIME_PROVIDER: 'container', CONTAINER_ENGINE: 'docker', CONTAINER_RUNTIME_IMAGE: 'runtime:test', CONTAINER_USER: '1000:1000' });
+    const args = buildContainerPreflightArgs('C:\\Mission Workspaces\\mission-id', config);
+    expect(args).toContain('type=bind,src=C:\\Mission Workspaces\\mission-id,dst=/workspace');
+    expect(args).toContain('type=bind,src=' + path.resolve('C:\\Codex Home') + ',dst=/codex-home');
+    expect(args).toContain('1000:1000'); expect(args).toContain('runtime:test'); expect(args.join(' ')).toContain('codex --version');
+    expect(args.join(' ')).not.toContain('secret-value'); expect(args).not.toContain('MODEL_API_KEY'); expect(args.join(' ')).not.toContain('codex exec');
   });
 });
