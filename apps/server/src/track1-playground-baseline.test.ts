@@ -63,14 +63,14 @@ class TrackBaselineRunner implements AgentRunner {
         await stat(path.join(src, 'index.ts')).then(() => true).catch(() => false),
       );
       await writeFile(
-        path.join(src, 'summary.ts'),
-        "export const summary = 'The CLI prints hello world and includes a test.';\n",
+        path.join(src, 'index.ts'),
+        "export const greeting = 'hello world again';\nconsole.log(greeting);\n",
       );
     }
     this.writeCount += 1;
 
     return {
-      output: this.writeCount === 1 ? 'Created the TypeScript CLI and test.' : 'Added the follow-up summary.',
+      output: this.writeCount === 1 ? 'Created the TypeScript CLI and test.' : 'Updated the CLI in the same session.',
       threadId: request.threadId ?? 'track-codex-session',
       usage: { inputTokens: 2, outputTokens: 2 },
     };
@@ -140,7 +140,7 @@ describe('Track 1 ordinary Playground baseline', () => {
 
     const followup = await impact.submit(
       agent.id,
-      'Add a short source file that summarizes what the CLI does.',
+      'Update the CLI greeting while keeping the existing test structure.',
       randomUUID(),
     );
     await waitFor(() => impact.list(agent.id).find((item) => item.id === followup.admission.id)?.status === 'admitted');
@@ -160,8 +160,8 @@ describe('Track 1 ordinary Playground baseline', () => {
     expect(reopenedStore.snapshot().agents.find((item) => item.id === agent.id)?.codexThreadId)
       .toBe('track-codex-session');
     expect(await readFile(path.join(reopenedWorkspaces.workspacePath(agent.id), 'src', 'index.ts'), 'utf8'))
-      .toContain('hello world');
-    expect(await readFile(path.join(reopenedWorkspaces.workspacePath(agent.id), 'src', 'summary.ts'), 'utf8'))
-      .toContain('CLI prints hello world');
+      .toContain('hello world again');
+    expect(await readFile(path.join(reopenedWorkspaces.workspacePath(agent.id), 'src', 'index.test.ts'), 'utf8'))
+      .toContain('assert.equal');
   });
 });
