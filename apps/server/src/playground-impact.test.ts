@@ -77,8 +77,8 @@ class CandidateFrontendRunner extends ImpactRunner {
     if (request.accessMode === 'write') {
       await mkdir(path.join(request.workspacePath, 'src'), { recursive: true });
       await writeFile(
-        path.join(request.workspacePath, 'src', 'main.ts'),
-        'document.body.textContent = "changed";',
+        path.join(request.workspacePath, 'src', 'App.tsx'),
+        'export default function App() { return <main>changed</main>; }',
       );
     }
     return result;
@@ -317,7 +317,7 @@ describe('Playground impact admission', () => {
     expect(runner.requests.find((request) => request.accessMode === 'write')!.threadId)
       .toBe('ordinary-existing-thread');
     expect(fixture.store.snapshot().agents[0]!.codexThreadId).toBeNull();
-    await expect(stat(path.join(fixture.agent.workspacePath, 'src', 'main.ts'))).rejects.toThrow();
+    await expect(stat(path.join(fixture.agent.workspacePath, 'src', 'App.tsx'))).rejects.toThrow();
   });
 
   it('invalidates a resumed thread when publication fails before authoritative mutation', async () => {
