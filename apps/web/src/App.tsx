@@ -337,7 +337,7 @@ export default function App() {
     }
   };
 
-  const confirmImpact = async (admission: PlaygroundImpactAdmission, choice: "governed" | "nonvisual") => {
+  const confirmImpact = async (admission: PlaygroundImpactAdmission, choice: "governed" | "nonvisual" | "cancel") => {
     setError(null);
     try {
       const result = await api.confirmImpact(admission.agentId, admission.id, choice);
@@ -615,7 +615,7 @@ export default function App() {
                       <strong>{impactStatusTitle(item.admission.status)}</strong>
                       <p>{item.admission.reason ?? "Conductor is checking the request against the real workspace before allowing changes to become permanent."}</p>
                       {item.admission.proposal?.surfaces.length ? <div className="impact-card__surfaces">{item.admission.proposal.surfaces.map((surface) => <span key={surface.id}>{surface.route} · {surface.states.length || 1} state{surface.states.length === 1 ? "" : "s"}</span>)}</div> : null}
-                      {item.admission.status === "confirmation_required" ? <div className="impact-card__actions"><button className="button button-primary" onClick={() => void confirmImpact(item.admission, "governed")}>Protect this change</button>{item.admission.allowNonvisualConfirmation ? <button className="button button-ghost" onClick={() => void confirmImpact(item.admission, "nonvisual")}>Continue as non-UI work</button> : null}</div> : null}
+                      {item.admission.status === "confirmation_required" ? <div className="impact-card__actions"><button className="button button-primary" onClick={() => void confirmImpact(item.admission, "governed")}>Protect this change</button>{item.admission.allowNonvisualConfirmation ? <button className="button button-ghost" onClick={() => void confirmImpact(item.admission, "nonvisual")}>Continue as non-UI work</button> : null}<button className="button button-ghost" onClick={() => void confirmImpact(item.admission, "cancel")}>Cancel request</button></div> : null}
                       {item.admission.status === "promoted" && item.admission.missionId ? <div className="impact-card__actions"><button className="button button-primary" onClick={() => setView("missions")}>Open Mission</button><code>{item.admission.missionId.slice(0, 8)}</code></div> : null}
                       <details><summary>Technical details</summary><small>Workspace checkpoint {item.admission.workspaceHash.slice(0, 10)} · Playground thread {item.admission.threadId ? "preserved" : "new"}</small></details>
                     </div>

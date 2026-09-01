@@ -17,7 +17,7 @@ const createAgentBody = z.object({ name: z.string().trim().min(1).max(80), descr
 const updateAgentBody = createAgentBody.partial().refine((value) => Object.keys(value).length > 0, "At least one field is required");
 const messageBody = z.object({ content: z.string().trim().min(1).max(50_000), requestId: z.string().uuid().optional() }).strict();
 const impactParams = z.object({ id: z.string().uuid(), admissionId: z.string().uuid() });
-const impactConfirmationBody = z.object({ choice: z.enum(['governed', 'nonvisual']) }).strict();
+const impactConfirmationBody = z.object({ choice: z.enum(['governed', 'nonvisual', 'cancel']) }).strict();
 const missionBody = z.object({ goal: z.string().trim().min(1).max(8_192), sourceAgentId: z.string().uuid(), designerAgentId: z.string().uuid(), builderAgentId: z.string().uuid(), tokenBudget: z.number().int().positive().safe().max(1_000_000_000).nullable().optional() }).strict();
 const recoveryRequest = z.discriminatedUnion("action", [
   z.object({ requestId: z.string().uuid(), action: z.literal("resume"), taskId: z.string().uuid() }),
