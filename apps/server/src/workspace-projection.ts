@@ -11,7 +11,8 @@ export const AUTHORITATIVE_FILE_BYTES = 4 * 1024 * 1024;
 const controlSegments = new Set(['.git', '.codex', '.conductor', 'node_modules', 'dist']);
 const frontendExtensions = /\.(?:css|scss|sass|less|html|htm|jsx|tsx|vue|svelte|astro|hbs|handlebars|ejs|pug|njk|twig)$/i;
 const scriptExtensions = /\.(?:js|ts|mjs|cjs)$/i;
-const frontendSegments = /(?:^|\/)(?:app|pages|routes?|views?|templates?|components?|layouts?|navigation|ui|client|browser|web)(?:\/|$)/i;
+const strongFrontendSegments = /(?:^|\/)(?:pages?|views?|templates?|components?|layouts?|navigation|ui|client|browser|web)(?:\/|$)/i;
+const contextualFrontendSegments = /(?:^|\/)(?:app|routes?)(?:\/|$)/i;
 const frontendConfig = /(?:^|\/)(?:vite|webpack|next|nuxt|svelte|astro|angular|tailwind|postcss)\.config\.(?:js|ts|mjs|cjs)$/i;
 const bootstrapName = /(?:^|\/)(?:main|app|index|bootstrap|router|routes?)\.(?:js|ts|mjs|cjs|jsx|tsx)$/i;
 const backendSegments = /(?:^|\/)(?:server|backend|api|db|database|migrations?|scripts?|cli|docs?|tests?|__tests__)(?:\/|$)/i;
@@ -21,6 +22,7 @@ const frameworkPackages = new Set(['react', 'react-dom', 'vue', 'svelte', 'next'
 export interface RepositoryFrameworkFacts {
   frontendPackages: string[];
   frontendRoots: string[];
+  nonvisualPackages: string[];
   frontendConfigs: string[];
   bootstrapPaths: string[];
   factsComplete: boolean;
@@ -66,6 +68,10 @@ function withinRoot(relativePath: string, root: string): boolean {
   return !root || relativePath === root || relativePath.startsWith(`${root}/`);
 }
 
+function mostSpecificOwner(relativePath: string, roots: readonly string[]): string | undefined {
+  return roots.filter((rootPath) => withinRoot(relativePath, rootPath)).sort((left, right) => right.length - left.length)[0];
+}
+
 async function readStableBoundedFile(filePath: string, relativePath: string): Promise<Buffer> {
   const handle = await open(filePath, 'r');
   try {
@@ -90,6 +96,7 @@ export async function inspectWorkspaceProjection(root: string, inventoryLimit = 
   const inventoryPaths: string[] = [];
   const files = new Map<string, { sha256: string; size: number }>();
   const frontendPackages = new Set<string>();
+  const nonvisualPackages = new Set<string>();
   const frontendConfigs = new Set<string>();
   const bootstrapPaths = new Set<string>();
   let entryCount = 0;
@@ -129,21 +136,31 @@ export async function inspectWorkspaceProjection(root: string, inventoryLimit = 
         try {
           const manifest = JSON.parse(bytes.toString('utf8')) as Record<string, unknown>;
           const dependencies = { ...(manifest.dependencies as Record<string, unknown> | undefined), ...(manifest.devDependencies as Record<string, unknown> | undefined) };
-          if (Object.keys(dependencies).some((name) => frameworkPackages.has(name))) frontendPackages.add(packageRoot(child));
+          const rootPath = packageRoot(child);
+          const hasFrontendFramework = Object.keys(dependencies).some((name) => frameworkPackages.has(name));
+          if (hasFrontendFramework) frontendPackages.add(rootPath);
+          else if (typeof manifest.bin === 'string' || (manifest.bin && typeof manifest.bin === 'object' && !Array.isArray(manifest.bin))) nonvisualPackages.add(rootPath);
         } catch { /* Malformed manifests remain ambiguous during path classification. */ }
       }
     }
   };
   await visit('');
   const frontendRoots = new Set<string>(frontendPackages);
-  for (const candidate of [...frontendConfigs, ...bootstrapPaths]) {
-    const owner = [...frontendPackages].filter((rootPath) => withinRoot(candidate, rootPath)).sort((left, right) => right.length - left.length)[0];
-    if (owner !== undefined) frontendRoots.add(owner);
+  for (const candidate of frontendConfigs) {
+    const owner = mostSpecificOwner(candidate, [...frontendPackages]);
+    frontendRoots.add(owner ?? packageRoot(candidate));
   }
   return {
     contentHash: hash.digest('hex'), inventoryPaths, inventoryTruncated, inventoryComplete: !inventoryTruncated,
     entryCount, fileCount, totalBytes, files,
-    frameworkFacts: { frontendPackages: [...frontendPackages].sort(), frontendRoots: [...frontendRoots].sort(), frontendConfigs: [...frontendConfigs].sort(), bootstrapPaths: [...bootstrapPaths].sort(), factsComplete: true },
+    frameworkFacts: {
+      frontendPackages: [...frontendPackages].sort(),
+      frontendRoots: [...frontendRoots].sort(),
+      nonvisualPackages: [...nonvisualPackages].sort(),
+      frontendConfigs: [...frontendConfigs].sort(),
+      bootstrapPaths: [...bootstrapPaths].sort(),
+      factsComplete: true,
+    },
   };
 }
 
@@ -151,25 +168,30 @@ export function compareWorkspaceProjections(before: WorkspaceProjection, after: 
   const paths = [...new Set([...before.files.keys(), ...after.files.keys()])].sort();
   const changes: WorkspaceProjectionDiff['files'] = [];
   for (const file of paths) {
-      const left = before.files.get(file);
-      const right = after.files.get(file);
-      if (!left && right) changes.push({ path: file, operation: 'ADDED' });
-      else if (left && !right) changes.push({ path: file, operation: 'DELETED' });
-      else if (left?.sha256 !== right?.sha256) changes.push({ path: file, operation: 'MODIFIED' });
+    const left = before.files.get(file);
+    const right = after.files.get(file);
+    if (!left && right) changes.push({ path: file, operation: 'ADDED' });
+    else if (left && !right) changes.push({ path: file, operation: 'DELETED' });
+    else if (left?.sha256 !== right?.sha256) changes.push({ path: file, operation: 'MODIFIED' });
   }
   return { files: changes, complete: before.frameworkFacts.factsComplete && after.frameworkFacts.factsComplete };
 }
 
 export function classifyChangedPath(relativePath: string, facts: RepositoryFrameworkFacts): 'frontend' | 'nonvisual' | 'ambiguous' {
   const normalized = relativePath.replaceAll('\\', '/');
-  if (frontendExtensions.test(normalized) || frontendSegments.test(normalized) || frontendConfig.test(normalized)) return 'frontend';
-  if (facts.frontendConfigs.includes(normalized) || facts.bootstrapPaths.includes(normalized)) return 'frontend';
-  const frontendOwned = facts.frontendRoots.some((rootPath) => withinRoot(normalized, rootPath));
-  if (frontendOwned && (scriptExtensions.test(normalized) || manifestName.test(normalized))) return 'frontend';
-  if (manifestName.test(normalized) && facts.frontendPackages.some((rootPath) => withinRoot(normalized, rootPath))) return 'frontend';
-  if (scriptExtensions.test(normalized)) return backendSegments.test(normalized) ? 'nonvisual' : 'ambiguous';
-  if (/\.(?:json|yaml|yml|toml)$/i.test(normalized) && !backendSegments.test(normalized)) return 'ambiguous';
-  return backendSegments.test(normalized) || /\.(?:md|txt|sql)$/i.test(normalized) ? 'nonvisual' : 'ambiguous';
+  if (frontendExtensions.test(normalized) || strongFrontendSegments.test(normalized) || frontendConfig.test(normalized)) return 'frontend';
+  if (facts.frontendConfigs.includes(normalized)) return 'frontend';
+
+  const frontendOwner = mostSpecificOwner(normalized, facts.frontendRoots);
+  if (frontendOwner !== undefined && (scriptExtensions.test(normalized) || manifestName.test(normalized) || contextualFrontendSegments.test(normalized) || facts.bootstrapPaths.includes(normalized))) return 'frontend';
+
+  const nonvisualOwner = mostSpecificOwner(normalized, facts.nonvisualPackages);
+  if (nonvisualOwner !== undefined && (scriptExtensions.test(normalized) || manifestName.test(normalized) || /\.(?:json|yaml|yml|toml)$/i.test(normalized))) return 'nonvisual';
+
+  if (backendSegments.test(normalized)) return 'nonvisual';
+  if (scriptExtensions.test(normalized)) return 'ambiguous';
+  if (/\.(?:json|yaml|yml|toml)$/i.test(normalized)) return 'ambiguous';
+  return /\.(?:md|txt|sql)$/i.test(normalized) ? 'nonvisual' : 'ambiguous';
 }
 
 export function classifyWorkspaceDiff(diff: WorkspaceProjectionDiff, facts: RepositoryFrameworkFacts): { decision: 'nonvisual' | 'governed' | 'uncertain'; reason: string } {
@@ -177,7 +199,8 @@ export function classifyWorkspaceDiff(diff: WorkspaceProjectionDiff, facts: Repo
   for (const change of diff.files) {
     const classification = classifyChangedPath(change.path, facts);
     if (classification === 'frontend') return { decision: 'governed', reason: `The actual changes affect a user-facing path: ${change.path}` };
-    if (classification === 'ambiguous') return { decision: 'uncertain', reason: `Conductor cannot prove that this changed path is non-UI work: ${change.path}` };
   }
+  const ambiguous = diff.files.find((change) => classifyChangedPath(change.path, facts) === 'ambiguous');
+  if (ambiguous) return { decision: 'uncertain', reason: `Conductor cannot prove that this changed path is non-UI work: ${ambiguous.path}` };
   return { decision: 'nonvisual', reason: 'The complete changes contain only repository-proven non-UI work.' };
 }
