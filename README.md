@@ -9,8 +9,9 @@ The Starter Kit remains the ordinary Agent platform. Conductor adds a server-sid
 ```text
 Playground request
 -> impact evidence
-   -> proven nonvisual: publish normally
-   -> frontend / ambiguous: protected Mission
+   -> proven nonvisual: isolated candidate -> inspect actual diff -> publish normally
+   -> proven frontend: protected Mission
+   -> uncertain: keep candidate isolated -> human confirms non-UI publication or protected Mission
 -> review exact design + requirements
 -> approve
 -> Builder
@@ -86,16 +87,21 @@ The model API key is supplied only through the server/runtime environment. Never
 
 For active development, use `npm run poc -- --dev`. Use `npm run poc` for the stable production-style rehearsal and recording.
 
-For the exact three-minute scenario, see [docs/DEMO.md](docs/DEMO.md). For fresh state, use [FRESH_STATE_RESET.md](FRESH_STATE_RESET.md). If setup is unclear, run `npm run demo:doctor`; it performs read-only checks and never prints the model API key, starts a Mission, or resets state.
+For the exact three-minute scenario and clean-state preparation, see [docs/DEMO.md](docs/DEMO.md). A clean reviewer state is restored with `npm run demo:reset` followed by `npm run demo:prepare`. If setup is unclear, run `npm run demo:doctor`; it performs read-only checks and never prints the model API key, starts a Mission, or resets state.
 
 ## What Conductor governs
 
 ### Playground impact
 
-Playground first plans impact without authoritative source writes. If execution is needed to resolve impact, Conductor uses an isolated candidate workspace. The complete actual diff is the final evidence:
+Playground first plans impact without authoritative source writes. The planning Runtime is read-only and independent from the Agent's ordinary Codex session. If read-only inspection tooling is unavailable, Conductor falls back to bounded server-provided repository evidence and raises uncertainty instead of inventing affected paths.
+
+If execution is needed to resolve impact, Conductor uses an isolated candidate workspace. The complete actual diff is the final evidence:
 
 - proven nonvisual work can publish transactionally through the ordinary Playground path;
-- frontend-affecting or ambiguous work is prevented from silently publishing and is promoted into the protected Mission path.
+- frontend-affecting work is prevented from silently publishing and is promoted into the protected Mission path;
+- an actually ambiguous diff remains isolated and requires an explicit human choice before the exact candidate can publish as non-UI work or move to a protected Mission.
+
+For ordinary accepted work, the candidate resumes the Agent's existing Codex thread and Conductor adopts that thread only after the corresponding candidate filesystem is successfully published. This preserves the Starter Kit's same-session follow-up behavior while keeping filesystem adoption transactional. If a resumed candidate is rejected, fails before publication, or is promoted because the actual diff is frontend-affecting, Conductor invalidates that potentially contaminated Runtime thread rather than allowing discarded conversational state to diverge from the authoritative workspace.
 
 ### Exact design approval
 
@@ -133,7 +139,7 @@ The first PASS allows the user to review the exact built result but does not com
 - no third Repair, retry-until-green loop, failing-result acceptance, or final-failure auto-Repair exists;
 - stale/superseded attempts, approvals, verification results, and publication state cannot grant completion.
 
-The existing Agent CRUD and Playground remain ordinary platform paths. Messages and Runs remain durable. Agents are rejected server-side only when an unfinished Mission legitimately reserves them. Successful publication resets unsafe stale Runtime thread context while preserving the authoritative filesystem and durable Playground history.
+The existing Agent CRUD and Playground remain ordinary platform paths. Messages and Runs remain durable. Agents are rejected server-side only when an unfinished Mission legitimately reserves them.
 
 ## Development and checks
 
