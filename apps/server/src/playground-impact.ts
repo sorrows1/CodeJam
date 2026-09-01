@@ -9,7 +9,6 @@ const surfaceId = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const frontendExtension = /\.(?:css|scss|sass|less|html|jsx|tsx|vue|svelte)$/i;
 const frontendSegment = /(?:^|\/)(?:app|pages|routes|views|components|layouts?|navigation|ui)(?:\/|$)/i;
 const visualIntent = /\b(?:ui|ux|visual|layout|style|styling|color|font|spacing|responsive|page|screen|navigation|navbar|sidebar|modal|dialog|form|button|component|accessibility|interaction|animation|display|frontend|front-end)\b/i;
-const conversationalOnly = /^(?:hi|hello|hey|hiya|howdy|thanks|thank\s+you|ok|okay|great|nice|cool)(?:\s+there)?[\s!,.?]*$/i;
 
 export const PLAYGROUND_IMPACT_PROPOSAL_EXAMPLE: PlaygroundImpactProposal = {
   routes: ['/settings', '/agents'],
@@ -120,15 +119,6 @@ export interface ImpactAdmissionDecision {
   reason: string;
 }
 
-export function normalizePlaygroundImpactProposal(prompt: string, proposal: PlaygroundImpactProposal): PlaygroundImpactProposal {
-  if (!conversationalOnly.test(prompt.trim()) || Object.values(proposal.effects).some(Boolean)) return proposal;
-  return {
-    routes: [], entrypoints: [], sharedLayouts: [], componentDependencies: [], predictedWritePaths: [], surfaces: [],
-    effects: { visual: false, interaction: false, accessibility: false, display: false },
-    evidence: ['The message is conversational and requests no workspace change.'], uncertainty: 'low',
-  };
-}
-
 export function isFrontendPath(value: string, facts?: RepositoryFrameworkFacts): boolean {
   return frontendExtension.test(value) || frontendSegment.test(value.replaceAll('\\', '/')) || Boolean(facts && classifyChangedPath(value, facts) === 'frontend');
 }
@@ -149,5 +139,5 @@ export function decidePlaygroundImpact(input: { prompt: string; proposal: Playgr
 
 export function impactProposalPrompt(userPrompt: string, repositoryPaths: readonly string[]): string {
   const paths = repositoryPaths.slice(0, 2_048).join('\n');
-  return `You are performing a read-only implementation-impact proposal. Do not write files or run commands that mutate the workspace. Inspect the repository and return ONLY one JSON object, with no prose or Markdown fences.\n\nExact schema rules:\n- Root keys are exactly routes, entrypoints, sharedLayouts, componentDependencies, predictedWritePaths, surfaces, effects, evidence, uncertainty.\n- routes, entrypoints, sharedLayouts, componentDependencies, predictedWritePaths, and evidence are arrays of strings, never arrays of objects.\n- Every surface has exactly id, route, entrypoint, sourcePaths, sharedDependencies, states, viewport. id, route, and entrypoint are non-null strings; route is one string, never an array. sourcePaths, sharedDependencies, and states are arrays of strings. viewport has exactly numeric width and height; do not use desktopViewport.\n- All paths are portable repository-relative paths without a leading slash or /workspace prefix. Use only inventory-verified paths for entrypoints, sharedLayouts, componentDependencies, and surface sharedDependencies. New predicted/source paths may be repository-relative paths that do not exist yet.\n- Every route, path, surface, state, and effect must describe a change the user request would cause. Existing repository pages and files are context only; never list them merely because they exist.\n- If the user message is conversational, an acknowledgement, or otherwise requests no workspace change, return empty routes, entrypoints, sharedLayouts, componentDependencies, predictedWritePaths, and surfaces; set every effect to false and uncertainty to low.\n- effects has exactly boolean visual, interaction, accessibility, display. uncertainty is exactly low, medium, or high.\n- Represent one shared component affecting multiple routes with separate surface objects using unique ids and routes.\n\nComplete shape example only; replace its paths and facts with inspected repository evidence:\n${JSON.stringify(PLAYGROUND_IMPACT_PROPOSAL_EXAMPLE, null, 2)}\n\nUser request:\n${userPrompt}\n\nBounded repository path inventory:\n${paths}`;
+  return `You are performing a read-only implementation-impact proposal. Do not write files or run commands that mutate the workspace. Inspect the repository and return ONLY one JSON object, with no prose or Markdown fences.\n\nExact schema rules:\n- Root keys are exactly routes, entrypoints, sharedLayouts, componentDependencies, predictedWritePaths, surfaces, effects, evidence, uncertainty.\n- routes, entrypoints, sharedLayouts, componentDependencies, predictedWritePaths, and evidence are arrays of strings, never arrays of objects.\n- Every surface has exactly id, route, entrypoint, sourcePaths, sharedDependencies, states, viewport. id, route, and entrypoint are non-null strings; route is one string, never an array. sourcePaths, sharedDependencies, and states are arrays of strings. viewport has exactly numeric width and height; do not use desktopViewport.\n- All paths are portable repository-relative paths without a leading slash or /workspace prefix. Use only inventory-verified paths for entrypoints, sharedLayouts, componentDependencies, and surface sharedDependencies. New predicted/source paths may be repository-relative paths that do not exist yet.\n- effects has exactly boolean visual, interaction, accessibility, display. uncertainty is exactly low, medium, or high.\n- Represent one shared component affecting multiple routes with separate surface objects using unique ids and routes.\n\nComplete shape example only; replace its paths and facts with inspected repository evidence:\n${JSON.stringify(PLAYGROUND_IMPACT_PROPOSAL_EXAMPLE, null, 2)}\n\nUser request:\n${userPrompt}\n\nBounded repository path inventory:\n${paths}`;
 }
