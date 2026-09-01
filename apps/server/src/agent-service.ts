@@ -284,7 +284,7 @@ export class AgentService {
   }
 
   listImpactAdmissions(agentId: string) { return this.impact?.list(agentId) ?? []; }
-  async confirmImpactAdmission(agentId: string, admissionId: string, choice: 'governed' | 'nonvisual') {
+  async confirmImpactAdmission(agentId: string, admissionId: string, choice: 'governed' | 'nonvisual' | 'cancel') {
     if (!this.impact) throw new HttpError(503, 'Playground impact governance is unavailable');
     return this.impact.confirm(agentId, admissionId, choice);
   }
