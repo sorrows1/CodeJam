@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { api, ApiError, setAuthToken } from "./api";
 import type { Agent, AgentRun, Message, PlaygroundImpactAdmission, SystemInfo } from "./types";
 import MissionPanel from "./MissionPanel";
+import { buildPlaygroundFeed } from "./playground-feed";
 
 const starterPrompts = [
   "Create a small TypeScript CLI that prints a weather summary from sample JSON.",
@@ -97,6 +98,10 @@ export default function App() {
     () => agents.find((agent) => agent.id === selectedId) ?? null,
     [agents, selectedId],
   );
+  const playgroundFeed = useMemo(
+    () => buildPlaygroundFeed(messages, impactAdmissions),
+    [messages, impactAdmissions],
+  );
 
   const refreshAgents = useCallback(async () => {
     const { agents: next } = await api.listAgents();
@@ -175,7 +180,7 @@ export default function App() {
 
   useEffect(() => {
     messageEnd.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, activeRun]);
+  }, [messages, impactAdmissions, activeRun]);
 
   const createAgent = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -574,7 +579,7 @@ export default function App() {
               </div>
 
               <div className="messages">
-                {messages.length === 0 && !activeRun ? (
+                {playgroundFeed.length === 0 && !activeRun ? (
                   <div className="welcome">
                     <div className="welcome-orbit">
                       <div>⌁</div>
@@ -594,30 +599,29 @@ export default function App() {
                     </div>
                   </div>
                 ) : (
-                  messages.map((message) => (
-                    <article className={"message message-" + message.role} key={message.id}>
+                  playgroundFeed.map((item) => item.kind === "message" ? (
+                    <article className={"message message-" + item.message.role} key={item.id}>
                       <div className="message-meta">
-                        <strong>{message.role === "user" ? "You" : selected.name}</strong>
-                        <span>{formatTime(message.createdAt)}</span>
+                        <strong>{item.message.role === "user" ? "You" : selected.name}</strong>
+                        <span>{formatTime(item.message.createdAt)}</span>
                       </div>
-                      <div className="message-body">{message.content}</div>
+                      <div className="message-body">{item.message.content}</div>
                     </article>
-                  ))
-                )}
-                {impactAdmissions.map((admission) => (
-                  <article className={`impact-card impact-card-${admission.status}`} key={admission.id}>
-                    <div className="impact-card__mark">{admission.status === "promoted" ? "M" : admission.status === "admitted" ? "✓" : "◇"}</div>
+                  ) : (
+                  <article className={`impact-card impact-card-${item.admission.status}`} key={item.id}>
+                    <div className="impact-card__mark">{item.admission.status === "promoted" ? "M" : item.admission.status === "admitted" ? "✓" : "◇"}</div>
                     <div className="impact-card__body">
                       <span className="eyebrow">Conductor request check</span>
-                      <strong>{impactStatusTitle(admission.status)}</strong>
-                      <p>{admission.reason ?? "Conductor is checking the request against the real workspace before allowing changes to become permanent."}</p>
-                      {admission.proposal?.surfaces.length ? <div className="impact-card__surfaces">{admission.proposal.surfaces.map((surface) => <span key={surface.id}>{surface.route} · {surface.states.length || 1} state{surface.states.length === 1 ? "" : "s"}</span>)}</div> : null}
-                      {admission.status === "confirmation_required" ? <div className="impact-card__actions"><button className="button button-primary" onClick={() => void confirmImpact(admission, "governed")}>Protect this change</button>{admission.allowNonvisualConfirmation ? <button className="button button-ghost" onClick={() => void confirmImpact(admission, "nonvisual")}>Continue as non-UI work</button> : null}</div> : null}
-                      {admission.status === "promoted" && admission.missionId ? <div className="impact-card__actions"><button className="button button-primary" onClick={() => setView("missions")}>Open Mission</button><code>{admission.missionId.slice(0, 8)}</code></div> : null}
-                      <details><summary>Technical details</summary><small>Workspace checkpoint {admission.workspaceHash.slice(0, 10)} · Playground thread {admission.threadId ? "preserved" : "new"}</small></details>
+                      <strong>{impactStatusTitle(item.admission.status)}</strong>
+                      <p>{item.admission.reason ?? "Conductor is checking the request against the real workspace before allowing changes to become permanent."}</p>
+                      {item.admission.proposal?.surfaces.length ? <div className="impact-card__surfaces">{item.admission.proposal.surfaces.map((surface) => <span key={surface.id}>{surface.route} · {surface.states.length || 1} state{surface.states.length === 1 ? "" : "s"}</span>)}</div> : null}
+                      {item.admission.status === "confirmation_required" ? <div className="impact-card__actions"><button className="button button-primary" onClick={() => void confirmImpact(item.admission, "governed")}>Protect this change</button>{item.admission.allowNonvisualConfirmation ? <button className="button button-ghost" onClick={() => void confirmImpact(item.admission, "nonvisual")}>Continue as non-UI work</button> : null}</div> : null}
+                      {item.admission.status === "promoted" && item.admission.missionId ? <div className="impact-card__actions"><button className="button button-primary" onClick={() => setView("missions")}>Open Mission</button><code>{item.admission.missionId.slice(0, 8)}</code></div> : null}
+                      <details><summary>Technical details</summary><small>Workspace checkpoint {item.admission.workspaceHash.slice(0, 10)} · Playground thread {item.admission.threadId ? "preserved" : "new"}</small></details>
                     </div>
                   </article>
-                ))}
+                  ))
+                )}
                 {activeRun && ["queued", "running"].includes(activeRun.status) && (
                   <article className="message message-assistant thinking">
                     <div className="message-meta">

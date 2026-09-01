@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MissionService } from './mission-service.js';
-import { decidePlaygroundImpact, impactProposalPrompt, parsePlaygroundImpactProposal, PLAYGROUND_IMPACT_PROPOSAL_EXAMPLE } from './playground-impact.js';
+import { decidePlaygroundImpact, impactProposalPrompt, normalizePlaygroundImpactProposal, parsePlaygroundImpactProposal, PLAYGROUND_IMPACT_PROPOSAL_EXAMPLE } from './playground-impact.js';
 import { PlaygroundImpactService } from './playground-impact-service.js';
 import { RunExecutionService } from './run-execution.js';
 import { JsonStore } from './store.js';
@@ -94,10 +94,30 @@ describe('Playground impact admission', () => {
     expect(prompt).toContain(JSON.stringify(PLAYGROUND_IMPACT_PROPOSAL_EXAMPLE, null, 2));
     expect(prompt).toContain('route is one string, never an array');
     expect(prompt).toContain('do not use desktopViewport');
+    expect(prompt).toContain('never list them merely because they exist');
+    expect(prompt).toContain('requests no workspace change');
   });
   it('fails closed on contradictory frontend facts', () => {
     const parsed = parsePlaygroundImpactProposal(JSON.stringify({ routes: ['/'], entrypoints: ['src/main.tsx'], sharedLayouts: [], componentDependencies: [], predictedWritePaths: ['src/App.tsx'], surfaces: [], effects: { visual: false, interaction: false, accessibility: false, display: false }, evidence: ['entrypoint'], uncertainty: 'low' }));
     expect(decidePlaygroundImpact({ prompt: 'Refactor the code', proposal: parsed, repositoryPaths: ['src/main.tsx', 'src/App.tsx'] })).toMatchObject({ decision: 'confirmation_required', allowNonvisualConfirmation: false });
+  });
+
+  it('removes copied repository surfaces from a conversational-only message', () => {
+    const contaminated = { ...PLAYGROUND_IMPACT_PROPOSAL_EXAMPLE, effects: { visual: false, interaction: false, accessibility: false, display: false }, evidence: ["The user request ('hi') contains no concrete change."], uncertainty: 'high' as const };
+    const normalized = normalizePlaygroundImpactProposal('hi', contaminated);
+    expect(normalized).toEqual({ routes: [], entrypoints: [], sharedLayouts: [], componentDependencies: [], predictedWritePaths: [], surfaces: [], effects: { visual: false, interaction: false, accessibility: false, display: false }, evidence: ['The message is conversational and requests no workspace change.'], uncertainty: 'low' });
+    expect(decidePlaygroundImpact({ prompt: 'hi', proposal: normalized, repositoryPaths: ['src/main.jsx', 'src/Dashboard.jsx', 'src/Agents.jsx', 'src/Settings.jsx', 'src/Sidebar.jsx'] })).toMatchObject({ decision: 'nonvisual', allowNonvisualConfirmation: true });
+  });
+
+  it('admits a greeting after discarding model-invented impact from existing routes', async () => {
+    const contaminated = JSON.stringify({ ...PLAYGROUND_IMPACT_PROPOSAL_EXAMPLE, effects: { visual: false, interaction: false, accessibility: false, display: false }, evidence: ["The user request ('hi') contains no concrete change."], uncertainty: 'high' });
+    const runner = new ImpactRunner(contaminated); const fixture = await setup(runner);
+    await fixture.impact.submit(fixture.agent.id, 'hi', randomUUID());
+    await waitFor(() => fixture.impact.list(fixture.agent.id)[0]?.status === 'admitted');
+    const admission = fixture.impact.list(fixture.agent.id)[0]!;
+    expect(admission).toMatchObject({ prompt: 'hi', decision: 'nonvisual', status: 'admitted', missionId: null, proposal: { routes: [], entrypoints: [], sharedLayouts: [], componentDependencies: [], predictedWritePaths: [], surfaces: [], uncertainty: 'low' } });
+    expect(runner.requests.map((request) => request.accessMode)).toEqual(['read_only', 'write']);
+    expect(fixture.store.snapshot().messages.map((message) => message.content)).toEqual(['hi', 'ordinary result']);
   });
 
   it('uses a read-only proposal and leaves a first published nonvisual candidate on a fresh thread', async () => {
