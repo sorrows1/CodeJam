@@ -210,7 +210,7 @@ export class PlaygroundImpactService {
   async confirm(
     agentId: string,
     admissionId: string,
-    choice: 'governed' | 'nonvisual',
+    choice: 'governed' | 'nonvisual' | 'cancel',
   ): Promise<PlaygroundImpactAdmission> {
     const snapshot = this.store.snapshot();
     const admission = snapshot.playgroundImpactAdmissions.find(
@@ -221,6 +221,37 @@ export class PlaygroundImpactService {
     if (admission.status !== 'confirmation_required') {
       throw new HttpError(409, 'Impact admission is not awaiting confirmation');
     }
+
+    if (choice === 'cancel') {
+      const hadCandidate = Boolean(admission.candidateRunId);
+      const cancelled = await this.store.mutate((database) => {
+        const current = database.playgroundImpactAdmissions.find((item) => item.id === admissionId);
+        const agent = database.agents.find((item) => item.id === agentId);
+        if (!current || current.status !== 'confirmation_required') {
+          throw new HttpError(409, 'Impact admission is not awaiting confirmation');
+        }
+        const timestamp = now();
+        current.status = 'failed';
+        current.reason = 'Request cancelled before any candidate changes were published.';
+        current.error = null;
+        current.completedAt = timestamp;
+        current.updatedAt = timestamp;
+        current.allowNonvisualConfirmation = false;
+        if (agent) {
+          if (hadCandidate && current.threadId !== null && agent.codexThreadId === current.threadId) {
+            agent.codexThreadId = null;
+          }
+          agent.status = 'ready';
+          agent.lastError = null;
+          agent.updatedAt = timestamp;
+          current.agentUpdatedAt = timestamp;
+        }
+        return structuredClone(current);
+      });
+      if (hadCandidate) await this.workspaces.discardPlaygroundCandidate(admissionId).catch(() => undefined);
+      return cancelled;
+    }
+
     if (choice === 'nonvisual' && !admission.allowNonvisualConfirmation) {
       throw new HttpError(409, 'Server evidence does not permit a nonvisual continuation');
     }
@@ -241,9 +272,6 @@ export class PlaygroundImpactService {
         current.reason = 'Human confirmed safe Mission governance';
         current.updatedAt = timestamp;
         if (agent) {
-          if (hadCandidate && current.threadId !== null && agent.codexThreadId === current.threadId) {
-            agent.codexThreadId = null;
-          }
           agent.status = 'ready';
           agent.updatedAt = timestamp;
           current.agentUpdatedAt = timestamp;
@@ -251,6 +279,7 @@ export class PlaygroundImpactService {
       });
       if (hadCandidate) await this.workspaces.discardPlaygroundCandidate(admissionId).catch(() => undefined);
       await this.missions.promotePlaygroundImpact(admissionId);
+      if (hadCandidate) await this.invalidatePromotedCandidateThread(admissionId);
       return this.store.snapshot().playgroundImpactAdmissions.find((item) => item.id === admissionId)!;
     }
 
@@ -512,15 +541,13 @@ export class PlaygroundImpactService {
         current.status = 'confirmation_required';
         current.decision = 'governed';
         current.allowNonvisualConfirmation = false;
-        if (current.threadId !== null && agent.codexThreadId === current.threadId) {
-          agent.codexThreadId = null;
-        }
       });
 
       if (impact.decision === 'governed') {
         await this.workspaces.discardPlaygroundCandidate(admission.id).catch(() => undefined);
         candidatePath = null;
         await this.missions.promotePlaygroundImpact(admission.id);
+        await this.invalidatePromotedCandidateThread(admission.id);
         return;
       }
 
@@ -570,6 +597,26 @@ export class PlaygroundImpactService {
         await this.workspaces.discardPlaygroundCandidate(admission.id).catch(() => undefined);
       }
     }
+  }
+
+  private async invalidatePromotedCandidateThread(admissionId: string): Promise<void> {
+    await this.store.mutate((database) => {
+      const admission = database.playgroundImpactAdmissions.find((item) => item.id === admissionId);
+      const agent = admission ? database.agents.find((item) => item.id === admission.agentId) : null;
+      if (
+        !admission ||
+        !agent ||
+        !admission.candidateRunId ||
+        admission.threadId === null ||
+        agent.codexThreadId !== admission.threadId
+      ) {
+        return;
+      }
+      // Promotion has already bound the exact source Agent timestamp/thread. Clearing only the
+      // discarded Runtime context here prevents it from being reused without changing that
+      // source-content/config binding underneath the newly created Mission.
+      agent.codexThreadId = null;
+    });
   }
 
   private async publishCandidate(admissionId: string): Promise<void> {
