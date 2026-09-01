@@ -41,31 +41,53 @@ The deterministic browser fixtures need the one-time `npm run demo:setup`
 browser install. On Linux, if Chromium reports missing system libraries, use
 `npx playwright install --with-deps chromium`.
 
-## Seed without finding a UUID
+## Restore the reviewer-ready checkpoint
 
-With the POC running, open a second terminal and run:
+With the POC stopped, run:
 
 ```text
+npm run demo:reset
+npm run demo:prepare
+npm run poc
+```
+
+In a second terminal after the POC is healthy, run:
+
+```text
+npm run demo:doctor
+```
+
+`demo:prepare` verifies every bounded snapshot file and SHA-256, rejects
+symlinks, credentials, Codex state, logs, non-empty targets, and a running POC,
+then rewrites only the Agent workspace path for the current machine. The
+restored UI contains one existing baseline Playground prompt, its promoted and
+completed Mission, FINAL PASS, publication, and the Agent Operations before
+state with Activity absent. The marker shown by `demo:doctor` identifies this
+as recorded provenance rather than a Run executed on the reviewer's machine.
+
+The live Activity prompt in `docs/DEMO.md` remains the required real configured
+Agent/Runtime path.
+
+## Recreate the recorded checkpoint
+
+Maintainers can recreate the checkpoint through genuine product transitions:
+
+```text
+npm run demo:reset
+npm run poc
+# in a second terminal:
 npm run demo:seed
+# Complete the printed baseline prompt through Playground and its governed Mission.
+npm run demo:seed
+npm run demo:doctor
+# Stop the POC, then:
+npm run demo:export-state
 ```
 
-The command creates a fresh `Demo Builder` Agent, then copies the checked-in
-`demo/intent-verification` fixture into that Agent's workspace. It prints the
-new UUID for auditability, but you do not need to copy it into another command.
-For the recording baseline, complete the real pre-recording Playground Mission
-documented in `docs/DEMO.md`, then run `npm run demo:seed` again. The seeder
-recognizes that exact completed Mission and preserves its published workspace
-and visible history.
-To select and reuse a particular Agent explicitly, the optional form is:
-
-```text
-npm run demo:seed -- --agent <agent-uuid>
-```
-
-The seeder requires the platform-managed workspace and rejects symlinks. It
-copies only the fixture's named files while the Agent has no history. Once the
-exact baseline Mission is complete, it refuses to overwrite the workspace or
-accept unrelated execution history.
+`demo:seed -- --agent <agent-uuid>` remains available to select a particular
+history-free Agent during that maintainer-only recreation flow. The exporter
+accepts only the exact completed baseline shape and removes Runtime thread
+identifiers; it never includes `codex-home`.
 
 ## Development changes
 

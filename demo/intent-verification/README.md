@@ -1,10 +1,10 @@
 # Intent verification fixture
 
-This Vite fixture is the source application seed for the Conductor demo. It
-contains a visible required result and a deterministic button interaction. A
-real pre-recording Playground Mission turns it into the published Agent
-Operations dashboard shown at the start of the recording; the live Mission
-then adds Activity.
+This credential-free Vite fixture is the source application used when a
+maintainer recreates the recorded reviewer checkpoint. It contains a visible
+required result and deterministic button interaction. A real baseline
+Playground Mission turns it into the Agent Operations dashboard; the live demo
+Mission later adds Activity.
 
 It is copied into a freshly created demo Agent workspace by:
 
@@ -17,7 +17,7 @@ To reuse a particular existing Agent, use
 the platform-managed workspace through the running control-plane API; do not
 pass a filesystem path or edit JsonStore directly.
 
-The exact pre-recording prompt and Mission controls are documented in
-`docs/DEMO.md`. After that Mission reaches FINAL PASS and publication, rerun
-`npm run demo:seed`: it preserves the real history and published workspace
-rather than copying this fixture over them.
+Reviewers do not run this baseline Mission. They use `npm run demo:prepare` to
+restore its bounded, sanitized, recorded checkpoint with the existing prompt
+and completed Mission already visible. The exact live prompt and Mission
+controls are documented in `docs/DEMO.md`.

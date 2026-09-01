@@ -47,35 +47,34 @@ Install the browser used by deterministic verification once for a new checkout:
 npm run demo:setup
 ```
 
-For every clean recording rehearsal, stop any running POC, reset the bounded
-local demo state, and then start the production-style POC:
+For every clean reviewer run, stop any running POC, reset the bounded local
+demo state, restore the recorded reviewer checkpoint, and then start the
+production-style POC:
 
 ```bash
 npm run demo:reset
+npm run demo:prepare
 npm run poc
 ```
 
-Open <http://localhost:3000>. In a second terminal, prepare the supported demo state:
+Open <http://localhost:3000>. In a second terminal, validate the reviewer-ready
+starting state:
 
 ```bash
-npm run demo:seed
-```
-
-For a new reset, complete the one-time real baseline Playground Mission shown
-in [docs/DEMO.md](docs/DEMO.md). Then rerun the seed and validation commands:
-
-```bash
-npm run demo:seed
 npm run demo:doctor
-npm run demo:verify
 ```
 
-The first seed creates the source Agent/app. The second seed recognizes and
-preserves the exact completed baseline Mission instead of overwriting it. No
-UUID copying, automated human approval, or manual JsonStore authority
-fabrication is part of the demo flow.
+The checkpoint contains the credential-free filesystem and durable authority
+records from one baseline genuinely completed through Playground, governed
+design, approval, Builder, FINAL verification, and publication. Reviewers
+therefore open `Demo Builder` with the existing baseline prompt and completed
+Mission already visible, then go straight to the real live Activity prompt in
+[docs/DEMO.md](docs/DEMO.md). The checkpoint is explicitly recorded provenance;
+it is not represented as a Run performed on the reviewer's machine.
 
-To choose an Agent explicitly:
+Maintainers can recreate and re-export the baseline through the real product
+path with `npm run demo:seed`; see [docs/LOCAL_POC.md](docs/LOCAL_POC.md).
+To select a particular history-free Agent during that maintainer flow:
 
 ```text
 npm run demo:seed -- --agent <agent-uuid>
@@ -88,35 +87,6 @@ The model API key is supplied only through the server/runtime environment. Never
 For active development, use `npm run poc -- --dev`. Use `npm run poc` for the stable production-style rehearsal and recording.
 
 For the exact three-minute scenario, see [docs/DEMO.md](docs/DEMO.md). For fresh state, use [FRESH_STATE_RESET.md](FRESH_STATE_RESET.md). If setup is unclear, run `npm run demo:doctor`; it performs read-only checks and never prints the model API key, starts a Mission, or resets state.
-
-## Three-minute proof
-
-The recording uses **one complete scenario**:
-
-1. select one ready Agent and briefly show its already-built real application;
-2. submit one ambiguous product request through Playground;
-3. show a real Agent/model/file/tool/Runtime action and Conductor's impact evidence;
-4. show the request enter a protected Mission because its real impact is user-facing or ambiguous;
-5. review and approve the exact proposed design plus acceptance requirements;
-6. run the Builder and visibly show that **Builder success is still not completion**;
-7. run independent checks against the actual captured application;
-8. review the built result, then show the separate final PASS authorize publication;
-9. return to the same application and demonstrate the newly published feature;
-10. show the Agent/platform ready and controllable afterward.
-
-The recommended demo task is:
-
-> **Give users a way to review recent agent activity and quickly filter it by status.**
-
-It intentionally does not say `frontend`, `React`, `UI`, `CSS`, `page`, or `component`; the demo proves that Conductor governs the actual work rather than relying only on prompt keywords.
-
-The deterministic browser proof can be run without another model call:
-
-```bash
-npm run demo:verify
-```
-
-It supplements the live Agent scenario; it does not replace the required real Agent Run.
 
 ## What Conductor governs
 
@@ -171,11 +141,9 @@ The existing Agent CRUD and Playground remain ordinary platform paths. Messages 
 npm ci
 npm run demo:setup
 npm run demo:reset
+npm run demo:prepare
 npm run poc
 # in a second terminal after the POC is healthy:
-npm run demo:seed
-# Complete Prompt A once through Playground and its governed Mission, then:
-npm run demo:seed
 npm run demo:doctor
 npm run demo:verify
 npm run check

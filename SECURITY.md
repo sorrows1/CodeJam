@@ -37,13 +37,17 @@ Codex uses `workspace-write` when Landlock is available. On unsupported kernels,
 startup warns and relies on the outer Docker or rootless Podman boundary. This
 fallback is not tenant isolation.
 
-The intent-verification fixture contains no credentials, `.env`, `.codex`,
-logs, or committed generated output. Seed it through the bounded control-plane
-path with `npm run demo:seed`, or select an existing Agent with
-`npm run demo:seed -- --agent <agent-uuid>`. Do not pass a workspace path or
-edit JsonStore directly. The visible pre-recording Mission must be completed
-through the real Playground, approval, verification, and publication path;
-the seeder preserves that authority history but never fabricates it.
+The source fixture and recorded reviewer checkpoint contain no credentials,
+`.env`, `.codex`, `codex-home`, sessions, logs, memories, installation identity,
+or SQLite Runtime state. `npm run demo:prepare` runs only while the POC is
+stopped, verifies the bounded file manifest and SHA-256 payload, refuses a
+non-empty or symlinked target, and rewrites only the exact Agent workspace path.
+The imported baseline is visibly identified as recorded provenance. It does not
+replace or masquerade as the live Activity Agent Run required by the demo.
+
+Maintainers regenerate the checkpoint with `npm run demo:seed` through the real
+Playground/Mission path and export it only after the POC stops. Do not pass an
+arbitrary workspace path or edit JsonStore manually.
 Mission artifacts, errors, events, and traces are bounded observable evidence;
 they do not contain raw prompts or private model reasoning.
 

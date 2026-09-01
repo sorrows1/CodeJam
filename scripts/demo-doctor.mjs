@@ -22,6 +22,7 @@ import {
   samePath,
 } from "./local-poc-utils.mjs";
 import { BASELINE_PROMPT } from "./demo-scenario.mjs";
+import { readAndValidateSnapshot } from "./demo-prepared-state.mjs";
 
 const environment = await loadLocalEnv();
 const stateRoot = localStateRoot(environment);
@@ -84,6 +85,23 @@ for (const directory of [stateRoot, path.join(stateRoot, "data"), path.join(stat
 const resetRootSafe = !samePath(stateRoot, repoDir) && !samePath(stateRoot, path.parse(stateRoot).root) && !samePath(stateRoot, os.homedir()) && !(await hasSymlinkComponent(stateRoot));
 report("Reset root", resetRootSafe, resetRootSafe ? "eligible for the bounded demo reset" : "refused because it is broad or symlinked");
 
+let preparedMarker = null;
+const preparedMarkerPath = path.join(stateRoot, "data", "prepared-reviewer-state.json");
+if (await pathExists(preparedMarkerPath)) {
+  try {
+    preparedMarker = JSON.parse(await readFile(preparedMarkerPath, "utf8"));
+    const { snapshot } = await readAndValidateSnapshot();
+    const valid = preparedMarker.formatVersion === snapshot.formatVersion
+      && preparedMarker.kind === snapshot.kind
+      && preparedMarker.payloadSha256 === snapshot.payloadSha256;
+    report("Reviewer checkpoint", valid, valid ? `recorded baseline ${snapshot.payloadSha256.slice(0, 12)} restored; the live Activity request remains the real demo Run` : "the restored checkpoint marker does not match the committed snapshot");
+  } catch (error) {
+    report("Reviewer checkpoint", false, error instanceof Error ? error.message : String(error));
+  }
+} else {
+  report("Reviewer checkpoint", true, "not imported; validating a locally produced baseline through authoritative API history");
+}
+
 for (const item of ["package.json", "index.html", "src", "README.md"]) required.push(path.join(repoDir, "demo", "intent-verification", item));
 required.push(path.join(repoDir, "Dockerfile.runtime"), path.join(repoDir, "apps", "server", "Dockerfile.verifier"));
 for (const item of required) report(`Required file ${path.relative(repoDir, item)}`, await pathExists(item), await pathExists(item) ? "present" : "missing");
@@ -127,7 +145,14 @@ if (serverHealthy) {
         && baselineDetail?.attempts?.some((item) => item.stage === "design" && item.status === "completed")
         && baselineDetail?.attempts?.some((item) => item.stage === "implement" && item.status === "completed")
         && baselineDetail?.events?.some((item) => item.type === "verification_passed" && item.details?.mode === "final");
-      report("Prepared history", Boolean(realBaselineReady), realBaselineReady ? `one real Playground prompt -> completed Mission ${baselineMission.id} -> FINAL PASS -> published workspace` : "complete the documented one-time baseline Playground Mission before recording");
+      const preparedHistoryDetail = preparedMarker
+        ? `recorded baseline Playground prompt -> completed Mission ${baselineMission?.id} -> FINAL PASS -> published workspace`
+        : `one real Playground prompt -> completed Mission ${baselineMission?.id} -> FINAL PASS -> published workspace`;
+      report("Prepared history", Boolean(realBaselineReady), realBaselineReady ? preparedHistoryDetail : "restore the reviewer checkpoint or complete the documented one-time baseline Playground Mission before recording");
+      if (preparedMarker) {
+        const markerBound = preparedMarker.provenance?.agentId === agent.id && preparedMarker.provenance?.missionId === baselineMission?.id;
+        report("Reviewer checkpoint binding", markerBound, markerBound ? "recorded provenance matches the visible Agent and Mission" : "checkpoint provenance does not match the visible Agent/Mission");
+      }
       let sourceText = "";
       try {
         const sourceRoot = path.join(workspace, "src");
