@@ -11,6 +11,7 @@ export const AUTHORITATIVE_FILE_BYTES = 4 * 1024 * 1024;
 const controlSegments = new Set(['.git', '.codex', '.conductor', 'node_modules', 'dist']);
 const frontendExtensions = /\.(?:css|scss|sass|less|html|htm|jsx|tsx|vue|svelte|astro|hbs|handlebars|ejs|pug|njk|twig)$/i;
 const scriptExtensions = /\.(?:js|ts|mjs|cjs)$/i;
+const testFile = /(?:^|\/)[^/]+\.(?:test|spec)\.(?:js|ts|mjs|cjs)$/i;
 const strongFrontendSegments = /(?:^|\/)(?:pages?|views?|templates?|components?|layouts?|navigation|ui|client|browser|web)(?:\/|$)/i;
 const contextualFrontendSegments = /(?:^|\/)(?:app|routes?)(?:\/|$)/i;
 const frontendConfig = /(?:^|\/)(?:vite|webpack|next|nuxt|svelte|astro|angular|tailwind|postcss)\.config\.(?:js|ts|mjs|cjs)$/i;
@@ -186,8 +187,9 @@ export function classifyChangedPath(relativePath: string, facts: RepositoryFrame
   if (frontendOwner !== undefined && (scriptExtensions.test(normalized) || manifestName.test(normalized) || contextualFrontendSegments.test(normalized) || facts.bootstrapPaths.includes(normalized))) return 'frontend';
 
   const nonvisualOwner = mostSpecificOwner(normalized, facts.nonvisualPackages);
-  if (nonvisualOwner !== undefined && (scriptExtensions.test(normalized) || manifestName.test(normalized) || /\.(?:json|yaml|yml|toml)$/i.test(normalized))) return 'nonvisual';
-
+  if (nonvisualOwner !== undefined && manifestName.test(normalized)) return 'nonvisual';
+  if (nonvisualOwner !== undefined && facts.bootstrapPaths.includes(normalized)) return 'nonvisual';
+  if (testFile.test(normalized)) return 'nonvisual';
   if (backendSegments.test(normalized)) return 'nonvisual';
   if (scriptExtensions.test(normalized)) return 'ambiguous';
   if (/\.(?:json|yaml|yml|toml)$/i.test(normalized)) return 'ambiguous';
