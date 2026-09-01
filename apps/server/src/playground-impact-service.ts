@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { HttpError } from './errors.js';
 import { safeMissionText } from './mission-evidence.js';
-import { decidePlaygroundImpact, impactProposalPrompt, parsePlaygroundImpactProposal, type ImpactAdmissionDecision } from './playground-impact.js';
+import { decidePlaygroundImpact, impactProposalPrompt, normalizePlaygroundImpactProposal, parsePlaygroundImpactProposal, type ImpactAdmissionDecision } from './playground-impact.js';
 import type { RunExecutionPort } from './run-execution.js';
 import { JsonStore } from './store.js';
 import type { Agent, AgentRun, Message, PlaygroundImpactAdmission, RunnerResult } from './types.js';
@@ -102,7 +102,7 @@ export class PlaygroundImpactService {
     let decision: ImpactAdmissionDecision = { decision: 'confirmation_required', allowNonvisualConfirmation: false, reason: execution.error ? 'Impact proposal failed closed' : 'Impact proposal output was invalid' };
     let error = execution.error?.message ?? null;
     if (execution.result?.output) {
-      try { proposal = parsePlaygroundImpactProposal(execution.result.output); decision = decidePlaygroundImpact({ prompt: admission.prompt, proposal, repositoryPaths: workspace.inventoryPaths, repositoryFacts: workspace.frameworkFacts }); error = null; }
+      try { proposal = normalizePlaygroundImpactProposal(admission.prompt, parsePlaygroundImpactProposal(execution.result.output)); decision = decidePlaygroundImpact({ prompt: admission.prompt, proposal, repositoryPaths: workspace.inventoryPaths, repositoryFacts: workspace.frameworkFacts }); error = null; }
       catch (caught) { error = caught instanceof Error ? caught.message : String(caught); }
     }
     const outcome = await this.store.mutate((database) => {
